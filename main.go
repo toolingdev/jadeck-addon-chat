@@ -133,7 +133,7 @@ func connectionTypes() []addon.ConnectionType {
 					{Text: "Find your Page in the answer. Paste its access_token in \"Facebook Page access token\" (it doesn't expire) and its id in \"Facebook Page ID\"."},
 					{Text: "Reply from jadeck (optional): save, then press \"Check the Page token\": it says whether replies can post as the Page. Replies to one comment go under it; a message to everyone is a comment on the live video."},
 				},
-				Note: "Apps like this can't read personal profiles: stream to the Page (or a Restream connection, coming later).",
+				Note: "Works with Pages only (not personal profiles). Looks for a live video on the Page once a minute and reads its comments every 5 s.",
 			},
 			map[string]any{"facebookPage": "123456789012345", "facebookToken": "••••••"},
 			"Facebook (123456789012345): live (13 watching)"),

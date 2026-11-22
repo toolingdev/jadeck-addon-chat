@@ -101,9 +101,9 @@ or unlisted, with chat on.
    `access_token` (it doesn't expire) in "Facebook Page access token" and
    its `id` in "Facebook Page ID".
 
-Good to know: apps like this can't read personal profiles. Stream to the
-Page (or a Restream connection, coming later). The add-on looks for a
-live video on the Page once a minute and reads its comments every 5 s.
+Good to know: this works with Pages only, not personal profiles. The
+add-on looks for a live video on the Page once a minute and reads its
+comments every 5 s.
 
 ## Twitch chat: channel name (no key)
 
