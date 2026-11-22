@@ -28,6 +28,7 @@ const graphAPI = "https://graph.facebook.com/v23.0"
 var rePageID = regexp.MustCompile(`^[A-Za-z0-9.]{1,80}$`)
 
 type facebook struct {
+	r           *facebookReply
 	page, token string
 	base        string
 	hc          *http.Client
@@ -48,7 +49,7 @@ func newFacebook(page, token string) (*facebook, error) {
 	if token == "" {
 		return nil, errors.New("Facebook: enter the Page access token")
 	}
-	return &facebook{page: page, token: token, base: graphAPI, hc: defaultClient,
+	return &facebook{r: &facebookReply{}, page: page, token: token, base: graphAPI, hc: defaultClient,
 		pollEvery: 5 * time.Second, checkEvery: 60 * time.Second, statsEvery: 60 * time.Second, limitWait: 5 * time.Minute}, nil
 }
 
@@ -107,6 +108,9 @@ type fbLive struct {
 	Title     string `json:"title"`
 	Status    string `json:"status"`
 	LiveViews *int   `json:"live_views"`
+	Video     *struct {
+		ID string `json:"id"`
+	} `json:"video"` // the underlying video (where replies to everyone are posted)
 }
 
 func (l fbLive) viewers() int {
@@ -121,7 +125,7 @@ func (f *facebook) findLive(ctx context.Context) (fbLive, error) {
 	var r struct {
 		Data []fbLive `json:"data"`
 	}
-	q := url.Values{"broadcast_status": {`["LIVE"]`}, "fields": {"id,title,status,live_views"}, "limit": {"5"}}
+	q := url.Values{"broadcast_status": {`["LIVE"]`}, "fields": {"id,title,status,live_views,video"}, "limit": {"5"}}
 	if err := f.get(ctx, "/"+f.page+"/live_videos", q, &r); err != nil {
 		return fbLive{}, err
 	}
@@ -190,6 +194,7 @@ func (f *facebook) comments(ctx context.Context, liveID string, since time.Time)
 }
 
 func (f *facebook) run(ctx context.Context, out sink) {
+	f.checkPerms(ctx) // can replies post? (and the Page's name)
 	for ctx.Err() == nil {
 		lv, err := f.findLive(ctx)
 		if ctx.Err() != nil {
@@ -217,6 +222,12 @@ func (f *facebook) run(ctx context.Context, out sink) {
 
 // follow polls one live video's comments until it ends.
 func (f *facebook) follow(ctx context.Context, lv fbLive, out sink, st sourceStatus) {
+	video := ""
+	if lv.Video != nil {
+		video = lv.Video.ID
+	}
+	f.setLive(lv.ID, video)
+	defer f.setLive("", "")
 	var newest time.Time
 	fails, stats := 0, time.Now()
 	for ctx.Err() == nil {

@@ -63,6 +63,10 @@ func (f *fbFake) handler(t *testing.T) http.Handler {
 				return
 			}
 			w.Write([]byte(`{"id":"LV1","status":"LIVE","live_views":15}`))
+		case "/me":
+			w.Write([]byte(`{"id":"1234567890","name":"Example Page"}`))
+		case "/debug_token":
+			w.Write([]byte(`{"data":{"is_valid":true,"scopes":["pages_read_engagement","pages_read_user_content"]}}`))
 		default:
 			t.Errorf("unexpected %s", r.URL.Path)
 			w.WriteHeader(404)

@@ -87,6 +87,7 @@ func parseYouTubeTarget(s string) (kind, id string, err error) {
 
 // youtube polls one channel's (or one video's) live chat.
 type youtube struct {
+	r          *youtubeReply
 	key        string
 	kind, id   string
 	base       string
@@ -112,7 +113,7 @@ func newYouTube(key, target string, minPoll time.Duration) (*youtube, error) {
 	if minPoll < 3*time.Second {
 		minPoll = 3 * time.Second
 	}
-	return &youtube{key: strings.TrimSpace(key), kind: kind, id: id, base: youtubeAPI, hc: defaultClient,
+	return &youtube{r: &youtubeReply{oauthBase: googleOAuthBase, store: tokens()}, key: strings.TrimSpace(key), kind: kind, id: id, base: youtubeAPI, hc: defaultClient,
 		minPoll: minPoll, checkEvery: 60 * time.Second, statsEvery: 60 * time.Second,
 		searchGap: 2 * time.Hour, quotaWait: 15 * time.Minute}, nil
 }
@@ -444,6 +445,8 @@ func (y *youtube) run(ctx context.Context, out sink) {
 
 // follow polls one live chat until it ends.
 func (y *youtube) follow(ctx context.Context, lv liveVideo, out sink, st sourceStatus) {
+	y.setChat(lv.chatID)
+	defer y.setChat("")
 	page, fails, stats := "", 0, time.Now()
 	for ctx.Err() == nil {
 		p, err := y.pollChat(ctx, lv.chatID, page)

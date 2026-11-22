@@ -1,12 +1,16 @@
 package main
 
-// Owncast chat: read as an anonymous viewer named "jadeck" (nothing is
-// posted).
+// Owncast chat: read as an anonymous chat user named as "Reply as" says
+// ("jadeck" by default); replies go out under that name.
 //
-//   POST <server>/api/chat/register {"displayName":"jadeck"} → {accessToken}
+//   POST <server>/api/chat/register {"displayName":"jadeck"} → {id, accessToken}
 //   websocket <server>/ws?accessToken=…  → {"type":"CHAT", id, body (HTML),
 //                                           user{displayName}, timestamp}
 //   GET <server>/api/status → {online, viewerCount, streamTitle}, every 30 s
+//   send: {"type":"CHAT","body":"…"} over the same websocket. Owncast
+//   doesn't answer a send: it shows the message to everyone (our own
+//   user id comes back), or tells only us why not with a CHAT_ACTION
+//   ("Authentication is required to participate in chat.").
 //
 // NOTE: /api/chat/register is what Owncast's own web chat uses; it is
 // not part of Owncast's documented, stable API and may change between
@@ -30,11 +34,13 @@ import (
 )
 
 type owncast struct {
+	name        string // the chat name ("Reply as")
 	base        string // scheme://host[:port][/path], no trailing slash
 	hc          *http.Client
 	statusEvery time.Duration
 	minBackoff  time.Duration
 	maxBackoff  time.Duration
+	r           *owncastReply
 }
 
 // owncastBase reads the server address as typed in a browser.
@@ -71,7 +77,7 @@ func newOwncast(addr string) (*owncast, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &owncast{base: base, hc: defaultClient, statusEvery: 30 * time.Second, minBackoff: time.Second, maxBackoff: 60 * time.Second}, nil
+	return &owncast{name: "jadeck", r: &owncastReply{}, base: base, hc: defaultClient, statusEvery: 30 * time.Second, minBackoff: time.Second, maxBackoff: 60 * time.Second}, nil
 }
 
 func (o *owncast) platform() string { return Owncast }
@@ -86,28 +92,30 @@ func (o *owncast) label() string {
 
 var errOwncastLogin = errors.New("this Owncast server didn't accept an anonymous chat login")
 
-// register gets an anonymous chat access token.
-func (o *owncast) register(ctx context.Context) (string, error) {
-	body := bytes.NewBufferString(`{"displayName":"jadeck"}`)
+// register gets an anonymous chat access token (and our user id).
+func (o *owncast) register(ctx context.Context) (token, userID string, err error) {
+	nb, _ := json.Marshal(map[string]string{"displayName": o.name})
+	body := bytes.NewBuffer(nb)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.base+"/api/chat/register", body)
 	if err != nil {
-		return "", errors.New("bad server address")
+		return "", "", errors.New("bad server address")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	res, err := o.hc.Do(req)
 	if err != nil {
-		return "", scrub(err)
+		return "", "", scrub(err)
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	var r struct {
+		ID          string `json:"id"`
 		AccessToken string `json:"accessToken"`
 	}
 	if res.StatusCode/100 != 2 || json.Unmarshal(b, &r) != nil || r.AccessToken == "" {
-		return "", fmt.Errorf("%w (%s)", errOwncastLogin, res.Status)
+		return "", "", fmt.Errorf("%w (%s)", errOwncastLogin, res.Status)
 	}
-	return r.AccessToken, nil
+	return r.AccessToken, r.ID, nil
 }
 
 type owncastStatus struct {
@@ -131,6 +139,7 @@ type owncastEvent struct {
 	Visible   *bool    `json:"visible"`
 	IDs       []string `json:"ids"` // VISIBILITY-UPDATE: messages hidden by a moderator
 	User      *struct {
+		ID          string `json:"id"`
 		DisplayName string `json:"displayName"`
 	} `json:"user"`
 }
@@ -251,7 +260,7 @@ func (o *owncast) run(ctx context.Context, out sink) {
 
 // session is one chat connection; ok when the chat was connected.
 func (o *owncast) session(ctx context.Context, out sink) (ok bool, err error) {
-	token, err := o.register(ctx)
+	token, me, err := o.register(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -266,6 +275,8 @@ func (o *owncast) session(ctx context.Context, out sink) (ok bool, err error) {
 		return false, errors.New(redact(err.Error(), token))
 	}
 	defer ws.Close()
+	o.r.connect(ws, me)
+	defer o.r.disconnect(ws)
 
 	type read struct {
 		raw string
@@ -313,6 +324,7 @@ func (o *owncast) session(ctx context.Context, out sink) (ok bool, err error) {
 				return true, r.err
 			}
 			msgs, hidden := parseOwncast(r.raw)
+			msgs = o.r.own(r.raw, msgs)
 			out.add(msgs...)
 			for _, id := range hidden {
 				out.remove(id)

@@ -22,14 +22,24 @@ const (
 
 // Message is one chat message or comment.
 type Message struct {
-	ID       string    // "<platform>:<the platform's id>", unique across platforms
-	Platform string    // YouTube, Facebook, Twitch, Rumble, Owncast (or "sample")
-	Author   string    // display name
-	Avatar   string    // picture URL, when the platform gives one
-	Text     string    // the message (a Super Chat's comment)
-	At       time.Time // when it was posted
-	Super    string    // a Super Chat / Super Sticker amount ("$10.00"), else ""
-	seq      uint64    // arrival order (ties on At)
+	ID       string     // "<platform>:<the platform's id>", unique across platforms
+	Platform string     // YouTube, Facebook, Twitch, Rumble, Owncast (or "sample")
+	Author   string     // display name
+	Avatar   string     // picture URL, when the platform gives one
+	Text     string     // the message (a Super Chat's comment)
+	At       time.Time  // when it was posted
+	Super    string     // a Super Chat / Super Sticker amount ("$10.00"), else ""
+	Mine     bool       // sent from jadeck (Author is the account it went out as)
+	Sent     []sentMark // Mine: where it got through
+	ReplyTo  string     // Mine: the author it answered ("" a message to everyone)
+	feed     string     // the platform feed it came from (registry id)
+	seq      uint64     // arrival order (ties on At)
+}
+
+// sentMark is one platform under a message sent from jadeck: ✓ or ✕.
+type sentMark struct {
+	Platform string `json:"platform"`
+	OK       bool   `json:"ok"`
 }
 
 // maxKept is how many messages the add-on keeps (the oldest go first).
@@ -242,6 +252,30 @@ func (s *store) hasOther(prefix string) bool {
 		}
 	}
 	return false
+}
+
+// suppress makes ids known without showing them: a platform's echo of a
+// message sent from here (it's already in the chat as "YOU").
+func (s *store) suppress(ids ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range ids {
+		if _, ok := s.byID[id]; !ok && id != "" {
+			s.byID[id] = -1
+		}
+	}
+}
+
+// setSent updates a sent message's ✓ / ✕ marks.
+func (s *store) setSent(id string, marks []sentMark) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i, ok := s.byID[id]
+	if !ok || i < 0 {
+		return false
+	}
+	s.msgs[i].Sent = slices.Clone(marks)
+	return true
 }
 
 // view is what the widget draws.

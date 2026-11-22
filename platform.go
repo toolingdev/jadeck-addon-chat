@@ -59,6 +59,7 @@ func detailLine(v feedView) string {
 // platformConn is one platform connection.
 type platformConn struct {
 	f      *feed
+	src    source
 	cancel context.CancelFunc
 	done   chan struct{}
 }
@@ -66,9 +67,12 @@ type platformConn struct {
 // openPlatform registers src's feed and starts it.
 func openPlatform(src source, label string) *platformConn {
 	f := newFeed(src.platform(), label)
+	if r, ok := src.(replier); ok {
+		f.rep = r
+	}
 	reg.register(f)
 	ctx, cancel := context.WithCancel(context.Background())
-	p := &platformConn{f: f, cancel: cancel, done: make(chan struct{})}
+	p := &platformConn{f: f, src: src, cancel: cancel, done: make(chan struct{})}
 	go func() {
 		defer close(p.done)
 		src.run(ctx, f)
@@ -127,6 +131,9 @@ type youtubeConfig struct {
 	Key    string `json:"youtubeKey"`
 	Target string `json:"youtubeChannel"`
 	Poll   any    `json:"youtubePollSeconds"` // number or text
+	// replies (optional): a "TVs and Limited Input devices" OAuth client
+	ClientID     string `json:"youtubeClientId"`
+	ClientSecret string `json:"youtubeClientSecret"`
 }
 
 func (c youtubeConfig) pollFloor() time.Duration {
@@ -154,6 +161,7 @@ func openYouTube(raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	y.r.clientID, y.r.secret = strings.TrimSpace(c.ClientID), strings.TrimSpace(c.ClientSecret)
 	return openPlatform(y, y.id), nil
 }
 
@@ -174,12 +182,13 @@ func openFacebook(raw json.RawMessage) (any, error) {
 
 func openTwitch(raw json.RawMessage) (any, error) {
 	var c struct {
-		Channel string `json:"channel"`
+		Channel  string `json:"channel"`
+		ClientID string `json:"twitchClientId"`
 	}
 	if err := readConfig(raw, &c); err != nil {
 		return nil, err
 	}
-	tw, err := newTwitch(c.Channel)
+	tw, err := newTwitch(c.Channel, c.ClientID)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +211,8 @@ func openRumble(raw json.RawMessage) (any, error) {
 
 func openOwncast(raw json.RawMessage) (any, error) {
 	var c struct {
-		Server string `json:"server"`
+		Server  string `json:"server"`
+		ReplyAs string `json:"replyAs"`
 	}
 	if err := readConfig(raw, &c); err != nil {
 		return nil, err
@@ -210,6 +220,12 @@ func openOwncast(raw json.RawMessage) (any, error) {
 	oc, err := newOwncast(c.Server)
 	if err != nil {
 		return nil, err
+	}
+	if n := strings.TrimSpace(c.ReplyAs); n != "" {
+		if len([]rune(n)) > 30 {
+			return nil, errors.New("Owncast: \"Reply as\" is at most 30 characters")
+		}
+		oc.name = n
 	}
 	return openPlatform(oc, oc.label()), nil
 }

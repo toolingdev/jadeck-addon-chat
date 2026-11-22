@@ -124,7 +124,7 @@ func (f *twitchFake) handler(w http.ResponseWriter, r *http.Request) {
 func testTwitch(t *testing.T, f *twitchFake) *twitch {
 	srv := httptest.NewServer(http.HandlerFunc(f.handler))
 	t.Cleanup(srv.Close)
-	tw, err := newTwitch("YourChurch")
+	tw, err := newTwitch("YourChurch", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -63,18 +63,20 @@ func parseTwitchChannel(s string) (string, error) {
 }
 
 type twitch struct {
+	r          *twitchReply
 	channel    string
 	url        string
 	minBackoff time.Duration
 	maxBackoff time.Duration
 }
 
-func newTwitch(channel string) (*twitch, error) {
+func newTwitch(channel, clientID string) (*twitch, error) {
 	ch, err := parseTwitchChannel(channel)
 	if err != nil {
 		return nil, err
 	}
-	return &twitch{channel: ch, url: twitchIRC, minBackoff: time.Second, maxBackoff: 60 * time.Second}, nil
+	r := &twitchReply{clientID: strings.TrimSpace(clientID), idBase: twitchIDBase, helixBase: twitchHelixBase, hc: defaultClient, store: tokens()}
+	return &twitch{r: r, channel: ch, url: twitchIRC, minBackoff: time.Second, maxBackoff: 60 * time.Second}, nil
 }
 
 func (t *twitch) platform() string { return Twitch }

@@ -23,6 +23,8 @@ type feed struct {
 	id, plat, label string
 	seq             uint64
 	ready           chan struct{} // closed at the first status
+	rep             replier       // nil: this platform can't reply (Rumble)
+	gate            sendGate      // at most one send a second
 
 	// guarded by reg.mu
 	st         sourceStatus
@@ -42,11 +44,13 @@ type feedView struct {
 	st              sourceStatus
 	seen            bool
 	ready           chan struct{}
+	rep             replier
+	gate            *sendGate
 }
 
 // view is the feed's current look (reg.mu held).
 func (f *feed) view() feedView {
-	v := feedView{id: f.id, plat: f.plat, label: f.label, seq: f.seq, st: f.st, seen: f.seen, ready: f.ready}
+	v := feedView{id: f.id, plat: f.plat, label: f.label, seq: f.seq, st: f.st, seen: f.seen, ready: f.ready, rep: f.rep, gate: &f.gate}
 	if f.st.Label != "" {
 		v.label = f.st.Label
 	}
@@ -142,6 +146,10 @@ func (f *feed) add(msgs ...Message) {
 	}
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
+	msgs = slices.Clone(msgs)
+	for i := range msgs {
+		msgs[i].feed = f.id
+	}
 	f.recent = append(f.recent, msgs...)
 	if over := len(f.recent) - maxKept; over > 0 {
 		f.recent = slices.Clone(f.recent[over:])
@@ -187,4 +195,16 @@ func (f *feed) current() feedView {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
 	return f.view()
+}
+
+// touch tells every hub the feed's look again (its reply sign-in changed).
+func (r *registry) touch(f *feed) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !f.registered {
+		return
+	}
+	for _, h := range r.hubs {
+		h.feedStatus(f.view())
+	}
 }

@@ -53,6 +53,12 @@ type Conn struct {
 	waited    bool
 	closed    bool
 
+	// replies (reply.go)
+	sends     map[string]*sendRecord
+	sendOrder []string
+	lastSend  *sendRecord
+	echoes    []echo
+
 	nmu    sync.Mutex
 	notify addon.Notifier
 
@@ -70,7 +76,7 @@ func Open(raw json.RawMessage) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Conn{cfg: cfg, store: newStore(), vmix: vm, feeds: map[string]feedView{}, vmixReady: make(chan struct{})}
+	c := &Conn{cfg: cfg, store: newStore(), vmix: vm, feeds: map[string]feedView{}, vmixReady: make(chan struct{}), sends: map[string]*sendRecord{}}
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 	if vm.input != "" {
@@ -175,7 +181,7 @@ func (s sampleSink) status(st sourceStatus) {
 // ------------------------------------------------------------ the hub
 
 func (c *Conn) add(msgs ...Message) {
-	if c.store.add(msgs...) > 0 {
+	if c.store.add(c.dropEchoes(msgs)...) > 0 {
 		c.changed()
 	}
 }
@@ -194,7 +200,7 @@ func (c *Conn) feedAdded(v feedView, backlog []Message) {
 	if leave {
 		c.stopSample()
 	}
-	c.store.add(backlog...)
+	c.store.add(c.dropEchoes(backlog)...)
 	c.changed()
 }
 
@@ -238,17 +244,21 @@ func (c *Conn) setVmix(err error) {
 
 // wireMessage is a message as the widget gets it.
 type wireMessage struct {
-	ID       string `json:"id"`
-	Platform string `json:"platform"`
-	Author   string `json:"author"`
-	At       string `json:"at"`
-	Text     string `json:"text"`
-	Super    string `json:"super,omitempty"`
-	OnScreen bool   `json:"onScreen,omitempty"`
+	ID       string     `json:"id"`
+	Platform string     `json:"platform"`
+	Author   string     `json:"author"`
+	At       string     `json:"at"`
+	Text     string     `json:"text"`
+	Super    string     `json:"super,omitempty"`
+	OnScreen bool       `json:"onScreen,omitempty"`
+	Mine     bool       `json:"mine,omitempty"`    // sent from jadeck ("YOU · <account>")
+	Sent     []sentMark `json:"sent,omitempty"`    // mine: ✓ / ✕ per platform
+	ReplyTo  string     `json:"replyTo,omitempty"` // mine: the author it answered
 }
 
 func wire(m Message) wireMessage {
-	return wireMessage{ID: m.ID, Platform: m.Platform, Author: m.Author, At: m.At.UTC().Format(time.RFC3339), Text: m.Text, Super: m.Super}
+	return wireMessage{ID: m.ID, Platform: m.Platform, Author: m.Author, At: m.At.UTC().Format(time.RFC3339), Text: m.Text, Super: m.Super,
+		Mine: m.Mine, Sent: m.Sent, ReplyTo: m.ReplyTo}
 }
 
 // wireSource is one status chip in the widget's header.
@@ -257,7 +267,11 @@ type wireSource struct {
 	Label    string `json:"label"`
 	State    string `json:"state"` // live | waiting | error
 	Note     string `json:"note"`
-	Viewers  int    `json:"viewers"` // -1 unknown
+	Viewers  int    `json:"viewers"`      // -1 unknown
+	ID       string `json:"id,omitempty"` // the feed (send_message's platforms)
+	CanReply bool   `json:"canReply"`
+	ReplyAs  string `json:"replyAs,omitempty"`  // the account replies go out as
+	ReplyWhy string `json:"replyWhy,omitempty"` // why it can't ("not signed in", "read only")
 }
 
 // AddonState is the Live chat widget's state.
@@ -329,12 +343,19 @@ func (c *Conn) state() map[string]any {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var names, details, notes []string
-	live, bad, watching := false, false, -1
+	live, bad, watching, canSend := false, false, -1, false
 	sources := []wireSource{}
 	seenName := map[string]bool{}
 	for _, f := range c.chips() {
 		st := f.st
-		ws := wireSource{Platform: f.plat, Label: f.label, State: st.State, Note: st.Note, Viewers: st.Viewers}
+		ws := wireSource{Platform: f.plat, Label: f.label, State: st.State, Note: st.Note, Viewers: st.Viewers, ID: f.id, ReplyWhy: "read only"}
+		if f.rep != nil {
+			ws.CanReply, ws.ReplyAs, ws.ReplyWhy = f.rep.canReply()
+			if ws.CanReply {
+				ws.ReplyWhy = ""
+			}
+			canSend = canSend || ws.CanReply
+		}
 		if !f.seen {
 			ws.State, ws.Note, ws.Viewers = stWaiting, "checking…", -1
 		}
@@ -411,6 +432,8 @@ func (c *Conn) state() map[string]any {
 		"screenLabel": "on screen in vMix (" + c.vmix.input + ")",
 		"vmixError":   c.vmixErr,
 		"detail":      strings.Join(details, " · "),
+		"canSend":     canSend && !c.sample,
+		"lastSend":    c.lastSendState(),
 	}
 	if watching >= 0 {
 		st["watching"] = watching
@@ -441,6 +464,25 @@ func (c *Conn) AddonAction(ctx context.Context, name string, params json.RawMess
 			return Message{}, errors.New("that message is no longer in the chat")
 		}
 		return m, nil
+	}
+	switch name {
+	case "send_message":
+		return c.sendMessage(ctx, params)
+	case "retry_send":
+		defer c.changed()
+		return c.retrySend(ctx, params)
+	case "dismiss_send":
+		var d struct {
+			SendID string `json:"sendId"`
+		}
+		json.Unmarshal(params, &d)
+		c.mu.Lock()
+		if c.lastSend != nil && (d.SendID == "" || d.SendID == c.lastSend.ID) {
+			c.lastSend = nil
+		}
+		c.mu.Unlock()
+		c.changed()
+		return map[string]any{"ok": true}, nil
 	}
 	defer c.changed()
 	switch name {

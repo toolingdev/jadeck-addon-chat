@@ -15,8 +15,8 @@ import (
 func TestOwncastBase(t *testing.T) {
 	for in, want := range map[string]string{
 		"https://live.example.org/":       "https://live.example.org",
-		"http://192.168.1.50:8080":          "http://192.168.1.50:8080",
-		"192.168.1.50:8080":                 "http://192.168.1.50:8080",
+		"http://192.168.1.50:8080":        "http://192.168.1.50:8080",
+		"192.168.1.50:8080":               "http://192.168.1.50:8080",
 		"localhost:8080":                  "http://localhost:8080",
 		"live.example.org":                "https://live.example.org",
 		"https://example.org/owncast?x=1": "https://example.org/owncast",

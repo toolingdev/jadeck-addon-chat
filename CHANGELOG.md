@@ -3,7 +3,7 @@
 ## 0.1.0 (unreleased)
 
 Needs jadeck 0.6 or newer (frame widgets and the shared frame kit; add-on
-SDK v0.3.0, with setup guides).
+SDK v0.3.0, with setup guides; the reply sign-in fields need its action fields).
 
 - **One connection per platform:** YouTube chat, Facebook Page chat,
   Twitch chat, Rumble chat and Owncast chat, each added, changed or
@@ -28,3 +28,21 @@ SDK v0.3.0, with setup guides).
 - **Pin** and **Hide here**, shared by every screen; removing a platform
   connection keeps its messages and the pin.
 - With no platform connection, a sample chat to place and size the widget.
+- **Replies:** tap a message → **↩ Reply** (its platform only), or
+  message every platform at once from the box at the bottom (**SEND TO**
+  chips, tap to leave one out; "Send to N"). Your message shows at once
+  as **YOU · <account>** with ✓ / ✕ per platform, and the platforms'
+  copies of it aren't shown twice. A result card says "Sent to 2 of 3",
+  why each failure happened, **Retry** only the failed ones, **Dismiss**.
+  In a small widget the box opens over the chat from the header.
+  - **YouTube:** sign in with Google (a code typed on any device);
+    `liveChatMessages.insert`; replies as "@author text".
+  - **Facebook:** as the Page, with `pages_manage_engagement` on the Page
+    token; replies go under the comment.
+  - **Twitch:** sign in with Twitch (a code typed on any device, a Public
+    app's client ID); real Twitch replies.
+  - **Owncast:** under the "Reply as" name, no sign-in.
+  - **Rumble:** read only.
+  - Sign-ins survive restarts in a file only this user can read; Sign out
+    deletes them. Actions `send_message`, `retry_send`, `dismiss_send`
+    and each connection's `reply_signin` field.

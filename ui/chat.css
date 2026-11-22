@@ -66,7 +66,7 @@
 .chip.error .ctail { color: var(--color-bad); }
 
 /* a tapped message's buttons (kit buttons) */
-.acts { display: flex; gap: 8px; margin-top: 8px; min-width: 0; }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; min-width: 0; }
 .acts .jk-btn { flex: 0 1 auto; min-width: 0; padding: 4px 12px; font-size: 13px; }
 .acts .jk-btn.show { flex-shrink: 0.5; }
 .pin .acts { margin-top: 6px; }
@@ -91,3 +91,84 @@ body.short #main { gap: 6px; }
 body.narrow .msg { gap: 8px; padding: 7px 8px; }
 body.narrow .acts { gap: 6px; }
 body.narrow .acts .jk-btn { padding: 4px 8px; }
+
+/* ------------------------------------------------------------ replies */
+.foot[hidden], .sendres[hidden], .composer[hidden], .chead[hidden], .cto[hidden], .jk-btn.ovlbtn[hidden] { display: none; }
+
+/* sent from here: amber, "YOU · account", ✓ / ✕ per platform under it */
+.msg.mine { border-color: color-mix(in srgb, var(--color-accent) 70%, transparent); background: color-mix(in srgb, var(--color-accent) 7%, var(--color-panel)); }
+.who.me { color: var(--color-accent); font-weight: 800; letter-spacing: .04em; }
+.marks { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 3px; font-size: 11px; line-height: 15px; color: var(--color-muted); min-width: 0; }
+.marks .ok { color: var(--color-muted); }
+.marks .bad { color: var(--color-bad); }
+.marks .hint { color: var(--color-dim); }
+.acts .jk-btn.reply { flex-shrink: 0.5; }
+
+/* header: message count + (small boxes) the Reply button */
+.hright { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.htext { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jk-btn.ovlbtn { flex: none; width: 32px; height: 32px; min-height: 32px; padding: 0; font-size: 16px; letter-spacing: 0; }
+
+/* the result card */
+.sendres { flex: none; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-bad) 55%, transparent); background: var(--color-panel-2); }
+.sendres.allok { border-color: color-mix(in srgb, var(--color-good) 45%, transparent); }
+.rtop { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-width: 0; }
+.rtitle { font-size: 13px; line-height: 18px; color: var(--color-fg); white-space: nowrap; }
+.rchips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.rchip { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--color-good) 55%, transparent); color: var(--color-good); }
+.rchip.bad { border-color: color-mix(in srgb, var(--color-bad) 60%, transparent); color: var(--color-bad); }
+.rerr { font-size: 12px; line-height: 1.35; color: var(--color-bad); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.racts { display: flex; gap: 8px; min-width: 0; }
+.racts .jk-btn { flex: 0 1 auto; min-width: 0; padding: 4px 12px; font-size: 13px; }
+.racts .rdismiss { background: transparent; border-color: transparent; box-shadow: none; color: var(--color-muted); }
+
+/* the composer */
+.composer { flex: none; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--color-line); background: var(--color-panel-2); }
+.chead { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cwho { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--color-info); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jk-btn.cx { flex: none; width: 32px; height: 32px; min-height: 32px; padding: 0; background: transparent; border-color: transparent; box-shadow: none; color: var(--color-muted); font-size: 15px; }
+.cto { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cto .jk-smallcaps { flex: none; }
+.tchips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; flex: 1; }
+.tchip { flex: 0 1 auto; min-width: 0; height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--color-line-strong);
+  background: transparent; color: var(--color-fg); font: 700 13px/30px var(--font-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.tchip.on { border-color: var(--color-accent); color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.tchip.offc { color: var(--color-muted); }
+.tchip.dis { color: var(--color-dim); border-color: var(--color-line); cursor: default; font-weight: 600; }
+.crow { display: flex; gap: 8px; min-width: 0; align-items: stretch; }
+.cin { flex: 1; min-width: 0; height: var(--jk-tap); padding: 0 12px; border-radius: 10px; border: 1px solid var(--color-accent);
+  background: var(--jk-recess); color: var(--color-fg); font: 400 14px var(--font-sans); outline: none; }
+.cin:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 35%, transparent); }
+.cin::placeholder { color: var(--color-dim); }
+.cin:disabled { border-color: var(--color-line); }
+@media (pointer: coarse) { .cin { font-size: 16px; } } /* iOS zooms into smaller text */
+.jk-btn.csend { flex: none; padding: 4px 14px; }
+.chint { font-size: 11px; line-height: 1.3; color: var(--color-dim); display: none; }
+.chint.bad { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--color-bad); }
+body.tall .chint { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+
+/* narrow: chips in one row, short names */
+body.narrow .tchips { flex-wrap: nowrap; overflow: hidden; gap: 4px; }
+body.narrow .tchip { padding: 0 8px; font-size: 12px; }
+body.narrow .cto { gap: 6px; }
+body.narrow .cto .jk-smallcaps { display: none; }
+body.narrow .rerr { -webkit-line-clamp: 1; }
+
+/* small boxes: the composer opens over the widget from the header */
+body.ovl .composer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; box-shadow: 0 -6px 18px rgb(0 0 0 / .55); background: var(--color-panel); }
+
+body.ovl .rerr { -webkit-line-clamp: 1; }
+
+
+
+/* the result card on one line (little room) */
+.sendres.compact { padding: 4px 4px 4px 10px; }
+.sendres.compact .rtop { flex-wrap: nowrap; gap: 6px; }
+.sendres.compact .rchips { flex: 1 1 auto; flex-wrap: nowrap; overflow: hidden; }
+.sendres.compact .racts { flex: none; gap: 4px; margin-left: auto; }
+.sendres.compact .racts .jk-btn { min-height: 32px; height: 32px; padding: 0 10px; }
+.sendres.compact .rdismiss { width: 32px; padding: 0; }
+body.narrow .tchip { min-width: 36px; padding: 0 6px; text-overflow: clip; }
