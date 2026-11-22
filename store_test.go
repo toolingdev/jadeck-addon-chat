@@ -73,9 +73,6 @@ func TestStorePinHideAndScreen(t *testing.T) {
 	if ids(v.messages) != "a c " || v.hiddenN != 1 {
 		t.Fatalf("hidden: %q %d", ids(v.messages), v.hiddenN)
 	}
-	if m, _ := s.latest(); m.ID != "c" {
-		t.Fatalf("latest %s", m.ID)
-	}
 	s.pin("a")
 	v = s.view(10)
 	if v.pinned == nil || v.pinned.ID != "a" || v.onScreen || ids(v.messages) != "c " {

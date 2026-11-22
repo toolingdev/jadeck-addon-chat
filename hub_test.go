@@ -175,3 +175,44 @@ func TestHubMergesDuplicateChips(t *testing.T) {
 	p2.Close()
 	p1.Close()
 }
+
+// A widget's platform pick filters the chips, the header and what it
+// shows of messages sent from here.
+func TestHubStateForOneWidgetsPlatforms(t *testing.T) {
+	a, _ := Open(nil)
+	defer a.Close()
+	tw, yt := newCtl(Twitch), newCtl(YouTube)
+	p1 := openPlatform(tw, "yourchurch")
+	defer p1.Close()
+	p2 := openPlatform(yt, "@yourchannel")
+	defer p2.Close()
+	tw.in <- pm(Twitch, "1", 1)
+	yt.in <- pm(YouTube, "2", 2)
+	waitFor(t, "both in", func() bool { return msgIDs(hubState(t, a)) == "twitch:1 youtube:2" })
+	a.store.add(Message{ID: "you:a", Platform: "you", Author: "me", Text: "to twitch", At: t0.Add(3 * time.Second), Mine: true,
+		Sent: []sentMark{{Platform: Twitch, OK: true}}})
+	a.store.add(Message{ID: "you:b", Platform: "you", Author: "me", Text: "going", At: t0.Add(4 * time.Second), Mine: true})
+
+	st, err := a.AddonStateFor(context.Background(), map[string]any{"platforms": []any{"twitch"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msgIDs(st) != "twitch:1 you:a you:b" || chipList(st) != "twitch/yourchurch/live" || st["source"] != "TWITCH" || st["watching"] != 7 || st["total"] != 1 {
+		t.Fatalf("twitch only: %q / %s / %v / %v / %v", msgIDs(st), chipList(st), st["source"], st["watching"], st["total"])
+	}
+	st, _ = a.AddonStateFor(context.Background(), map[string]any{"platforms": []any{"youtube"}})
+	if msgIDs(st) != "youtube:2 you:b" || chipList(st) != "youtube/@yourchannel/live" {
+		t.Fatalf("youtube only: %q / %s", msgIDs(st), chipList(st))
+	}
+	// a platform with no connection: no chips, and it says so (a message
+	// still going out shows everywhere until its ✓ / ✕ are in)
+	st, _ = a.AddonStateFor(context.Background(), map[string]any{"platforms": []any{"rumble"}})
+	if chipList(st) != "" || msgIDs(st) != "you:b" || !strings.Contains(st["note"].(string), "None of this widget's platforms") {
+		t.Fatalf("rumble only: %s / %q / %v", chipList(st), msgIDs(st), st["note"])
+	}
+	// nil settings (Test, or a widget without fields): everything
+	st, _ = a.AddonStateFor(context.Background(), nil)
+	if chipList(st) != "twitch/yourchurch/live youtube/@yourchannel/live" || st["watching"] != 14 {
+		t.Fatalf("all: %s / %v", chipList(st), st["watching"])
+	}
+}

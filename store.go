@@ -51,15 +51,16 @@ type store struct {
 	msgs     []Message // sorted by At, then arrival
 	byID     map[string]int
 	seq      uint64
-	total    int // every message ever added (kept or not)
+	total    int            // every message ever added (kept or not)
+	totalBy  map[string]int // the same, per platform
 	hidden   map[string]bool
 	pinned   string // id of the pinned message ("" none)
-	onScreen string // id of the message on screen in vMix ("" none)
+	onScreen string // id of the message marked on screen ("" none)
 	shown    *Message
 }
 
 func newStore() *store {
-	return &store{byID: map[string]int{}, hidden: map[string]bool{}}
+	return &store{byID: map[string]int{}, hidden: map[string]bool{}, totalBy: map[string]int{}}
 }
 
 // add merges messages in: new ones are inserted in time order, ones
@@ -87,6 +88,7 @@ func (s *store) add(in ...Message) int {
 		}
 		s.byID[m.ID] = -1
 		s.total++
+		s.totalBy[m.Platform]++
 		n++
 	}
 	if n == 0 {
@@ -155,18 +157,6 @@ func (s *store) getLocked(id string) (Message, bool) {
 	return Message{}, false
 }
 
-// latest is the newest message not hidden here.
-func (s *store) latest() (Message, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i := len(s.msgs) - 1; i >= 0; i-- {
-		if !s.hidden[s.msgs[i].ID] {
-			return s.msgs[i], true
-		}
-	}
-	return Message{}, false
-}
-
 func (s *store) hide(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -196,7 +186,8 @@ func (s *store) unpin() {
 	s.pinned = s.onScreen
 }
 
-// setOnScreen marks the message vMix shows; it's pinned while it's up.
+// setOnScreen marks the message a widget put in vMix; it's pinned while
+// it's up.
 func (s *store) setOnScreen(m Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -225,6 +216,7 @@ func (s *store) removePrefix(prefix string) int {
 	for _, m := range s.msgs {
 		if strings.HasPrefix(m.ID, prefix) {
 			n++
+			s.totalBy[m.Platform]--
 			delete(s.hidden, m.ID)
 			continue
 		}
@@ -286,23 +278,36 @@ type view struct {
 	total, hiddenN int
 }
 
-func (s *store) view(limit int) view {
+// view is every message; viewFor only the ones keep says yes to (the
+// pinned one included: a pin keep refuses isn't shown).
+func (s *store) view(limit int) view { return s.viewFor(limit, nil, nil) }
+
+// viewFor: keep picks the messages (nil: all), and platforms (nil: all)
+// which platforms' totals count.
+func (s *store) viewFor(limit int, keep func(Message) bool, platforms []string) view {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	ok := func(m Message) bool { return keep == nil || keep(m) }
 	v := view{total: s.total}
+	if platforms != nil {
+		v.total = 0
+		for _, p := range platforms {
+			v.total += s.totalBy[p]
+		}
+	}
 	if s.pinned != "" {
-		if m, ok := s.getLocked(s.pinned); ok {
+		if m, found := s.getLocked(s.pinned); found && ok(m) {
 			v.pinned, v.onScreen = &m, s.onScreen == s.pinned
 		}
 	}
 	for _, m := range s.msgs {
-		if s.hidden[m.ID] {
+		if s.hidden[m.ID] && ok(m) {
 			v.hiddenN++
 		}
 	}
 	for i := len(s.msgs) - 1; i >= 0 && len(v.messages) < limit; i-- {
 		m := s.msgs[i]
-		if s.hidden[m.ID] || m.ID == s.pinned {
+		if s.hidden[m.ID] || m.ID == s.pinned || !ok(m) {
 			continue
 		}
 		v.messages = append(v.messages, m)

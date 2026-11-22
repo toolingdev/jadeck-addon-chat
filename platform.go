@@ -4,7 +4,7 @@ package main
 // (youtube, facebook, twitch, rumble, owncast). Each builds its source,
 // registers it with the in-process hub (registry.go) and runs it until
 // the connection is closed. They have no widgets: their Test line is
-// that platform's status, and every Live chat connection merges them.
+// that platform's status, and the Live chat hub merges them.
 
 import (
 	"context"
@@ -106,7 +106,7 @@ func (p *platformConn) AddonState(ctx context.Context) (map[string]any, error) {
 	}, nil
 }
 
-// Close stops the source and takes it out of every Live chat (their
+// Close stops the source and takes it out of the Live chat hub (their
 // messages so far stay).
 func (p *platformConn) Close() error {
 	p.cancel()

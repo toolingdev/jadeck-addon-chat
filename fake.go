@@ -1,6 +1,6 @@
 package main
 
-// A simulated chat: played by a Live chat connection while no platform
+// A simulated chat: played by the Live chat hub while no platform
 // connection is open (so the widget can be tried and placed before the
 // keys exist), for the Settings preview, and in tests. Names are made up (first name and an
 // initial).

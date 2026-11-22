@@ -1,14 +1,64 @@
 # Live chat — jadeck add-on
 
 Your live stream's chat from **YouTube**, **Facebook**, **Twitch**,
-**Rumble** and **Owncast** in one dashboard widget, newest at the bottom,
-Super Chats, bits, subs and rants in green, and one status chip per
-platform under the header. Tap a message to:
+**Rumble** and **Owncast** on a dashboard, newest at the bottom, with
+Super Chats, bits, subs and rants in green. Two widgets read the same
+chat:
 
-- **Show on screen**: put it in a vMix title (vMix Social's layout), so
-  the booth can bring it on air as an overlay;
-- **Pin**: keep it at the top of the widget on every screen;
-- **Hide here**: hide it from the widget (not from the platform);
+- **Live chat**: just the comments from every platform, big and easy
+  to read. No reply box and no buttons, for the person up front.
+- **Live chat + reply**: the comments plus a reply box, **Show on
+  screen** (in vMix), **Pin** and **Hide here**, for the booth or
+  whoever answers viewers.
+
+## Quick setup
+
+1. **Add a connection for each platform** you stream to (Settings →
+   Connections → Add connection): YouTube chat, Facebook Page chat,
+   Twitch chat, Rumble chat or Owncast chat. Each has a "How to set up"
+   guide (below).
+2. **Add a widget** to a dashboard: **Live chat** or **Live chat +
+   reply**. Both read every platform connection you added; there's no
+   "Live chat" connection to add (the controller makes the one the
+   widgets use by itself).
+3. Optional, in the widget's settings: **Platforms** (empty: all) and,
+   for Live chat + reply, Show on screen (below).
+
+With no platform connection, the widgets show a **sample chat**, so you
+can place and size them first.
+
+| Connection | What it needs |
+|---|---|
+| **YouTube chat** | API key · about 5 min |
+| **Facebook Page chat** | Page token · about 10 min · Page admin |
+| **Twitch chat** | Channel name · no key |
+| **Rumble chat** | Live Stream API link · about 2 min |
+| **Owncast chat** | Server address |
+
+Each platform is its own connection, so you can add, change or remove
+one without touching the others. Removing one mid-service keeps its
+messages and the pin; the other platforms keep running. Two connections
+of one platform (say, two YouTube channels) both show, each with its own
+chip. Every connection has a **Test** button: it says in one line what
+that platform is doing ("Twitch (yourchurch): chat connected (Twitch
+doesn't share viewer counts without sign-in)").
+
+## The widgets
+
+**Live chat** (comments only): each comment is the platform and name in
+the platform's colour ("YOUTUBE · Ruth K.") over the words in big text
+(about 17 px, smaller in a small box). The header says how many platforms
+and how many are watching; a platform with a problem gets a red line
+under it. The pinned or on-screen message sits on top in amber. Tapping
+does nothing, unless you turn on **Let people tap comments** in its
+settings: then a tap offers **Pin** and **Hide here**.
+
+**Live chat + reply**: one status chip per platform under the header,
+and tap a message to:
+
+- **Show on screen**: put it in a vMix title (below);
+- **Pin**: keep it at the top of the widgets on every screen;
+- **Hide here**: hide it from the widgets (not from the platform);
 - **↩ Reply**: answer it on its own platform (shown when that platform
   can reply right now).
 
@@ -16,57 +66,40 @@ The box at the bottom sends one message to **every platform** that can
 take it ("Send to 3"; tap a platform to leave it out). Reading needs no
 sign-in; replying is optional, per platform (see [Replies](#replies)).
 
-## How it fits together
+**Platforms** (both widgets' settings): pick YouTube, Facebook, Twitch,
+Rumble and/or Owncast to show only those: their messages, chips and
+watching count (and, for Live chat + reply, the SEND TO chips). Empty
+shows every platform. Each widget has its own pick, so a Spanish-language
+screen can show only Facebook while the booth sees everything.
 
-Each platform is its **own connection** (Settings → Connections → Add),
-so you can add, change or remove one without touching the others:
+## Show on screen (Live chat + reply)
 
-| Connection | What it needs |
-|---|---|
-| **Live chat** | Add this first · vMix optional |
-| **YouTube chat** | API key · about 5 min |
-| **Facebook Page chat** | Page token · about 10 min · Page admin |
-| **Twitch chat** | Channel name · no key |
-| **Rumble chat** | Live Stream API link · about 2 min |
-| **Owncast chat** | Server address |
+Show on screen uses the **vMix connection** you already have (the vMix
+add-on); nothing to type. In the Live chat + reply widget's settings:
 
-The **Live chat** connection is the one the widget, macros and agent
-tools use. It merges every platform connection of this add-on that's
-open. Removing a platform connection mid-service keeps its messages and
-the pin; the other platforms keep running. Two connections of one
-platform (say, two YouTube channels) both show, each with its own chip.
+1. **vMix connection**: pick it. Blank: Show on screen is off.
+2. **Title for comments**: pick the GT title from that vMix's list. It
+   needs vMix Social's layout: Message, FromName, Title, FromPhoto.
+3. Optional (advanced): **Title heading**, "Live Comments" by default.
 
-Every connection has a **Test** button: it says in one line what that
-platform is doing ("Twitch (yourchurch): chat connected (Twitch doesn't
-share viewer counts without sign-in)").
+Show on screen runs the vMix add-on's own actions on that connection:
 
-## Live chat (the widget and vMix)
-
-1. Add a platform connection for each place you stream (below).
-2. For Show on screen: in vMix, Settings → Web Controller → **Enabled**,
-   and type that PC's address in "vMix address" (127.0.0.1:8088 when vMix
-   runs on the same PC).
-3. Type the name of the vMix GT title input that shows comments in "vMix
-   title input". It needs vMix Social's layout: Message, FromName, Title,
-   FromPhoto.
-4. Add the **Live chat** widget to a dashboard.
-
-With no platform connection, the widget shows a **sample chat**, so you
-can place and size it first.
-
-Show on screen calls vMix's Web Controller (port 8088):
-
-| vMix function | Field | Value |
+| vMix add-on action | Field | Value |
 |---|---|---|
-| SetText | `Title.Text` | "Live Comments" (setting "Title heading") |
-| SetText | `FromName.Text` | who wrote it (with the amount for a Super Chat, bits or rant) |
-| SetText | `Message.Text` | the message |
-| SetImage | `FromPhoto.Source` | their picture, when the platform gives one |
+| `title_text` | `Message.Text` | the message |
+| `title_text` | `FromName.Text` | who wrote it (with the amount for a Super Chat, bits or rant) |
+| `title_text` | `Title.Text` | the title heading |
+| `title_image` | `FromPhoto.Source` | their picture, when the platform gives one |
 
-Bring the title on air with a vMix overlay (a vMix widget or macro in
-jadeck, or in vMix). "Take off screen" (tap the pinned message) empties
-the name, message and photo. Both are also macro steps and agent tools
-(`chat_show_on_screen`, `chat_clear_screen`).
+With no picture, the photo is emptied (`run_function` SetImage), so the
+last person's face doesn't stay. Then the message is marked **ON
+SCREEN** (and pinned) on every screen. If vMix refuses, the widget says
+why in red and nothing is marked. Bring the title on air with a vMix
+overlay (a vMix widget or macro in jadeck, or in vMix). **Clear from
+screen** (tap the pinned message) empties the message, name and heading.
+
+The marks are also actions (`mark_on_screen` with a message id,
+`clear_on_screen`); they only change the widgets, not vMix.
 
 ## YouTube chat: API key (about 5 min)
 
@@ -145,8 +178,8 @@ off or its version may differ.
 
 ## Replies
 
-Two ways to answer, from the Live chat widget (or the `send_message`
-action, a macro step and agent tool):
+Two ways to answer, from the Live chat + reply widget (or the
+`send_message` action, a macro step and agent tool):
 
 - **Reply to one comment**: tap it → **↩ Reply**. The box says
   "↩ Replying to Ana L. on Facebook" (✕ cancels) and it goes to that

@@ -30,6 +30,13 @@
     if (K.editing) return Promise.resolve(null);
     return req({ t: "action", name: name, params: params || {} }).catch(function (e) { K.log(name + ": " + e.message); throw e; });
   };
+  // actVia runs an action on the connection picked in one of this
+  // widget's "connection" fields (e.g. the vMix connection in field
+  // "vmix"); the controller checks it against that add-on's actions.
+  K.actVia = function (fieldKey, name, params) {
+    if (K.editing) return Promise.resolve(null);
+    return req({ t: "action", name: name, params: params || {}, via: fieldKey }).catch(function (e) { K.log(fieldKey + "/" + name + ": " + e.message); throw e; });
+  };
   K.log = function (text) { send({ t: "log", text: String(text).slice(0, 300) }); };
   K.el = function (tag, cls, text) { return JK.el(tag, cls, null, text); };
 

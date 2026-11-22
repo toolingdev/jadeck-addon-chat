@@ -2,29 +2,40 @@
 
 ## 0.1.0 (unreleased)
 
-Needs jadeck 0.6 or newer (frame widgets and the shared frame kit; add-on
-SDK v0.3.0, with setup guides; the reply sign-in fields need its action fields).
+Needs jadeck 0.6 or newer (frame widgets and the shared frame kit) and add-on
+SDK v0.5.0 (setup guides, action fields, automatic connection types,
+connection fields in widget settings and actions run through them).
 
 - **One connection per platform:** YouTube chat, Facebook Page chat,
   Twitch chat, Rumble chat and Owncast chat, each added, changed or
-  removed on its own without restarting the others. The **Live chat**
-  connection merges every one that's open and holds the vMix settings.
+  removed on its own without restarting the others. There's no "Live
+  chat" connection to add: the controller makes the one the widgets use
+  by itself (needs SDK v0.5.0's automatic connection types).
 - **Setup guides:** every connection type says what it needs and walks
   through getting it, step by step, with links to the right pages.
-- **Live chat widget:** every platform in one list, newest at the bottom
-  (it follows new messages unless you've scrolled up); Super Chats,
-  Super Stickers, Twitch bits and subs, and Rumble rants in green with the
-  amount; author names in the platform's colour; one status chip per
-  platform (live with viewers, waiting, or a problem); message count in
-  the header.
+- **Two widgets, independent of the connections:**
+  - **Live chat**: just the comments from every platform, big and easy
+    to read (platform and name over the words), no reply box and no
+    buttons. Setting **Let people tap comments** (off by default) lets a
+    tap Pin or Hide here.
+  - **Live chat + reply**: everything below: one status chip per
+    platform, the reply box, Show on screen, Pin and Hide here.
+  - Both: newest at the bottom (it follows new messages unless you've
+    scrolled up); Super Chats, Super Stickers, Twitch bits and subs, and
+    Rumble rants in green with the amount; a **Platforms** setting
+    (empty: all) per widget, filtering messages, chips and the watching
+    count; they fit from 220 × 180 px up.
 - **Twitch:** anonymous chat, no key; deleted and timed-out messages go.
 - **Rumble:** chat and rants through your Live Stream API link.
 - **Owncast:** chat from your own server, read as an anonymous viewer.
 - **YouTube** finds the channel's live stream by itself within the API
   quota; **Facebook** finds the Page's live video by itself.
-- **Show on screen:** fills a vMix GT title in vMix Social's layout
-  (Title, FromName, Message, FromPhoto); the message stays pinned in
-  amber while it's up. Take off screen empties it. Also macro steps.
+- **Show on screen** (Live chat + reply): through the vMix connection
+  picked in the widget's settings (the vMix add-on's `title_text` /
+  `title_image`), into a GT title in vMix Social's layout (Message,
+  FromName, Title, FromPhoto) picked from that vMix's titles; then the
+  message shows ON SCREEN, pinned in amber, on every screen. Clear from
+  screen empties it. Actions `mark_on_screen` and `clear_on_screen`.
 - **Pin** and **Hide here**, shared by every screen; removing a platform
   connection keeps its messages and the pin.
 - With no platform connection, a sample chat to place and size the widget.
@@ -35,6 +46,7 @@ SDK v0.3.0, with setup guides; the reply sign-in fields need its action fields).
   copies of it aren't shown twice. A result card says "Sent to 2 of 3",
   why each failure happened, **Retry** only the failed ones, **Dismiss**.
   In a small widget the box opens over the chat from the header.
+  (Live chat + reply.)
   - **YouTube:** sign in with Google (a code typed on any device);
     `liveChatMessages.insert`; replies as "@author text".
   - **Facebook:** as the Page, with `pages_manage_engagement` on the Page

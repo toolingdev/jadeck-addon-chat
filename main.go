@@ -1,7 +1,8 @@
 // Live chat: a jadeck add-on. YouTube, Facebook, Twitch, Rumble and
-// Owncast chat, each its own connection, merged in one widget; reply to
-// one comment or message every platform at once; and any message put on
-// screen through a vMix title.
+// Owncast chat, each its own connection, merged in two widgets: Live
+// chat (just the comments, big) and Live chat + reply (reply to one
+// comment or message every platform at once, and put a message on screen
+// through the user's vMix connection).
 package main
 
 import (
@@ -16,28 +17,46 @@ var Version = "0.1.0"
 
 func main() { addon.Serve(spec()) }
 
-// sampleState is the widget as the Settings preview draws it.
-func sampleState() map[string]any {
+// sampleMessages is the sample chat as the Settings previews draw it.
+func sampleMessages() (msgs []wireMessage, pin wireMessage) {
 	at := time.Date(2026, 11, 21, 19, 41, 0, 0, time.UTC)
-	var msgs []wireMessage
-	for i, n := range []int{1, 2, 3, 6} {
+	for i, n := range []int{0, 2, 6, 12} {
 		msgs = append(msgs, wire(fakeMessage(n, at.Add(time.Duration(i+1)*time.Minute))))
 	}
-	pin := wire(fakeMessage(5, at))
+	return msgs, wire(fakeMessage(5, at))
+}
+
+// sampleSources is the status chips of the previews.
+func sampleSources() []wireSource {
+	return []wireSource{
+		{Platform: YouTube, Label: "@yourchannel", State: stLive, Viewers: 21, ID: "youtube-1", CanReply: true, ReplyAs: "yourchannel"},
+		{Platform: Facebook, Label: "123456789012345", State: stLive, Viewers: 13, ID: "facebook-2", CanReply: true, ReplyAs: "Your Page"},
+		{Platform: Twitch, Label: "yourchurch", State: stLive, Note: twitchNote, Viewers: -1, ID: "twitch-3", CanReply: true, ReplyAs: "yourchurch"},
+	}
+}
+
+// commentsSample is the Live chat (comments only) widget's preview: no
+// composer, no send result.
+func commentsSample() map[string]any {
+	msgs, _ := sampleMessages()
+	return map[string]any{
+		"connected": true, "sample": false, "source": "YOUTUBE + FACEBOOK + TWITCH", "live": true, "note": "",
+		"sources": sampleSources(), "watching": 34, "total": 128, "messages": msgs, "pinned": nil, "hiddenCount": 0,
+	}
+}
+
+// replySample is the Live chat + reply widget's preview.
+func replySample() map[string]any {
+	msgs, pin := sampleMessages()
 	pin.OnScreen = true
-	msgs = append(msgs, wireMessage{ID: "you:s1", Platform: "you", Author: "yourchannel", At: at.Add(5 * time.Minute).Format(time.RFC3339),
+	at := time.Date(2026, 11, 21, 19, 46, 0, 0, time.UTC)
+	msgs = append(msgs, wireMessage{ID: "you:s1", Platform: "you", Author: "yourchannel", At: at.Format(time.RFC3339),
 		Text: "Welcome! Today's verse: John 3:16", Mine: true,
 		Sent: []sentMark{{Platform: YouTube, OK: true}, {Platform: Twitch, OK: true}, {Platform: Facebook, OK: false}}})
 	return map[string]any{
 		"connected": true, "sample": false, "source": "YOUTUBE + FACEBOOK + TWITCH", "live": true, "note": "",
-		"sources": []wireSource{
-			{Platform: YouTube, Label: "@yourchannel", State: stLive, Viewers: 21, ID: "youtube-1", CanReply: true, ReplyAs: "yourchannel"},
-			{Platform: Facebook, Label: "123456789012345", State: stLive, Viewers: 13, ID: "facebook-2", CanReply: true, ReplyAs: "Your Page"},
-			{Platform: Twitch, Label: "yourchurch", State: stLive, Note: twitchNote, Viewers: -1, ID: "twitch-3", CanReply: true, ReplyAs: "yourchurch"},
-		},
-		"canSend": true, "lastSend": nil,
+		"sources": sampleSources(), "canSend": true, "lastSend": nil,
 		"watching": 34, "total": 128, "messages": msgs, "pinned": pin, "hiddenCount": 0,
-		"canShow": true, "screenLabel": "on screen in vMix (Social 1)",
 	}
 }
 
@@ -52,6 +71,9 @@ func replyField(button, help string) addon.Field {
 
 const replyHelp = "Reading needs no sign-in. To reply, sign in once as the account to reply as."
 
+// widgetStep is every platform guide's step after the reading setup.
+var widgetStep = addon.GuideStep{Text: "Add the Live chat widget (comments only) or Live chat + reply to a dashboard."}
+
 // platformType is a platform connection type: no widgets, its Test line
 // is that platform's status.
 func platformType(id, label, desc string, fields []addon.Field, needs string, g *addon.Guide, sample map[string]any, sampleTest string) addon.ConnectionType {
@@ -62,31 +84,12 @@ func platformType(id, label, desc string, fields []addon.Field, needs string, g 
 func connectionTypes() []addon.ConnectionType {
 	return []addon.ConnectionType{
 		{
-			ID: "chat", Label: "Live chat", Capabilities: []string{addon.CapTool},
-			Description: "The Live chat widget and its actions: merges every platform chat connection (YouTube, Facebook, Twitch, Rumble, Owncast) " +
-				"and fills a vMix title for Show on screen. With no platform connection, the widget shows a sample chat.",
-			Needs: "Add this first",
-			Guide: &addon.Guide{
-				Steps: []addon.GuideStep{
-					{Text: "Add a platform connection below for each place you stream: YouTube, Facebook, Twitch, Rumble or Owncast chat."},
-					{Text: "For Show on screen: in vMix, open Settings → Web Controller and tick Enabled, then type that PC's address in \"vMix address\"."},
-					{Text: "Type the name of the vMix GT title input that shows comments in \"vMix title input\". It needs vMix Social's layout: Message, FromName, Title, FromPhoto."},
-					{Text: "Add the Live chat widget to a dashboard."},
-				},
-				Note: "With no platform connection, the widget shows a sample chat so you can place and size it first.",
-			},
-			Fields: []addon.Field{
-				{Key: "vmixHost", Label: "vMix address", Type: "text", Default: "127.0.0.1:8088", Placeholder: "127.0.0.1:8088",
-					Help: "127.0.0.1:8088 when vMix runs on this PC."},
-				{Key: "vmixTitle", Label: "vMix title input", Type: "text", Placeholder: "Social 1",
-					Help: "Name or number of the comments title. Empty: Show on screen is off."},
-				{Key: "vmixTitleText", Label: "Title heading", Type: "text", Default: "Live Comments", Advanced: true,
-					Help: "Goes in the title's Title.Text field."},
-				{Key: "vmixUser", Label: "vMix username", Type: "text", Advanced: true, Help: "Only if the Web Controller has a password."},
-				{Key: "vmixPassword", Label: "vMix password", Type: "password", Advanced: true},
-			},
-			Sample:     map[string]any{"vmixHost": "127.0.0.1:8088", "vmixTitle": "Social 1"},
-			SampleTest: "YouTube (@yourchannel): live (21 watching) · Twitch (yourchurch): " + twitchNote + " · vMix: answered",
+			// The hub every widget binds to: the controller makes it by
+			// itself (Auto), so nobody adds a "Live chat" connection.
+			ID: "chat", Label: "Live chat", Capabilities: []string{addon.CapTool}, Auto: true,
+			Description: "Merges every platform chat connection (YouTube, Facebook, Twitch, Rumble, Owncast) for the Live chat widgets and their actions. " +
+				"With no platform connection, the widgets show a sample chat.",
+			SampleTest: "YouTube (@yourchannel): live (21 watching) · Twitch (yourchurch): " + twitchNote,
 		},
 		platformType("youtube", "YouTube chat", "Reads a YouTube channel's live chat with an API key (no sign-in). It finds the live stream by itself. Replying is optional: sign in with Google.",
 			[]addon.Field{
@@ -108,6 +111,7 @@ func connectionTypes() []addon.ConnectionType {
 					{Text: "Go to Credentials → Create credentials → API key. Copy the key and paste it in \"YouTube API key\".", Link: link("Credentials", "https://console.cloud.google.com/apis/credentials")},
 					{Text: "Optional: edit the key and restrict it to the YouTube Data API v3."},
 					{Text: "Enter the channel's @handle, its UC… id, or a link to the live video."},
+					widgetStep,
 					{Text: "Reply from jadeck (optional): in Google Cloud → APIs & Services → OAuth consent screen, choose External, and add the channel's Google account as a test user (or publish the app).", Link: link("OAuth consent screen", "https://console.cloud.google.com/apis/credentials/consent")},
 					{Text: "Credentials → Create credentials → OAuth client ID, type \"TVs and Limited Input devices\". Paste its client ID and secret in \"OAuth client ID\" and \"OAuth client secret\", and save.", Link: link("Credentials", "https://console.cloud.google.com/apis/credentials")},
 					{Text: "Press \"Sign in with Google to reply\", open google.com/device on any phone or computer, type the code, and pick the channel's account.", Code: "google.com/device"},
@@ -131,6 +135,7 @@ func connectionTypes() []addon.ConnectionType {
 					{Text: "Copy that token into the Access Token Debugger and press Extend Access Token. Copy the longer token it gives.", Link: link("Access Token Debugger", "https://developers.facebook.com/tools/debug/accesstoken/")},
 					{Text: "Back in the Explorer, paste the extended token and run this:", Code: "me/accounts?fields=id,name,access_token"},
 					{Text: "Find your Page in the answer. Paste its access_token in \"Facebook Page access token\" (it doesn't expire) and its id in \"Facebook Page ID\"."},
+					widgetStep,
 					{Text: "Reply from jadeck (optional): save, then press \"Check the Page token\": it says whether replies can post as the Page. Replies to one comment go under it; a message to everyone is a comment on the live video."},
 				},
 				Note: "Works with Pages only (not personal profiles). Looks for a live video on the Page once a minute and reads its comments every 5 s.",
@@ -148,6 +153,7 @@ func connectionTypes() []addon.ConnectionType {
 				Steps: []addon.GuideStep{
 					{Text: "Nothing to create: Twitch chat is public. Type the channel name from its address in \"Twitch channel\".", Code: "twitch.tv/yourchurch → yourchurch", Link: link("Twitch", "https://www.twitch.tv/")},
 					{Text: "Press Test."},
+					widgetStep,
 					{Text: "Reply from jadeck (optional): in the Twitch developer console, Register Your Application: any name, OAuth Redirect URL http://localhost, Category \"Chat Bot\" (or Other), Client Type Public.", Code: "http://localhost", Link: link("Register an app", "https://dev.twitch.tv/console/apps/create")},
 					{Text: "Copy its Client ID into \"Twitch app client ID\" and save. (A Public app has no secret.)"},
 					{Text: "Press \"Sign in to Twitch to reply\", open twitch.tv/activate on any phone or computer, type the code, and sign in with the account replies should come from.", Code: "twitch.tv/activate"},
@@ -167,6 +173,7 @@ func connectionTypes() []addon.ConnectionType {
 					{Text: "Sign in to Rumble and open Account → Live Stream API.", Link: link("Live Stream API", "https://rumble.com/account/livestream-api")},
 					{Text: "Copy the link it shows. Keep it private: it works like a password."},
 					{Text: "Paste it in \"Live Stream API link\" and press Test."},
+					widgetStep,
 				},
 				Note: "Rumble shares the last 50 messages and rants while you're live. Its API is read only: jadeck can't reply on Rumble.",
 			},
@@ -184,6 +191,7 @@ func connectionTypes() []addon.ConnectionType {
 				Steps: []addon.GuideStep{
 					{Text: "Type your Owncast server's address as you open it in a browser.", Code: "https://live.example.org"},
 					{Text: "Press Test."},
+					widgetStep,
 					{Text: "Reply from jadeck (optional): type the name replies should show under in \"Reply as\" (\"jadeck\" by default). Nothing to sign in to."},
 				},
 				Note: "Reads chat as an anonymous chat user under the \"Reply as\" name. A server set to let only signed-in users chat refuses replies (the result says so).",
@@ -193,20 +201,26 @@ func connectionTypes() []addon.ConnectionType {
 	}
 }
 
+// platformsField is both widgets' platform pick (empty: all).
+var platformsField = addon.Field{Key: "platforms", Label: "Platforms", Type: addon.FieldSelect, Multiple: true,
+	Options: []addon.Option{{Value: YouTube, Label: "YouTube"}, {Value: Facebook, Label: "Facebook"}, {Value: Twitch, Label: "Twitch"},
+		{Value: Rumble, Label: "Rumble"}, {Value: Owncast, Label: "Owncast"}},
+	Help: "Empty: every platform."}
+
 func spec() addon.Spec {
 	return addon.Spec{
 		Manifest: addon.Manifest{
 			ID: "chat", Name: "Live chat", Version: Version, Publisher: "jadeck", APIVersion: addon.APIVersion, Repo: "toolingdev/jadeck-addon-chat",
-			Description: "YouTube, Facebook, Twitch, Rumble and Owncast chat in one widget: reply, and show messages in vMix.",
+			Description: "YouTube, Facebook, Twitch, Rumble and Owncast chat in one list: just the comments, or reply too.",
 			Reaches: "YouTube Data API and Facebook Graph API (with the key and Page token you enter), Twitch chat, Rumble's Live Stream API, " +
-				"your Owncast server, and the vMix PC you name (Web Controller, port 8088). To reply: Google and Twitch sign-in " +
+				"and your Owncast server. Show on screen goes through your vMix connection (the vMix add-on). To reply: Google and Twitch sign-in " +
 				"(oauth2.googleapis.com, id.twitch.tv) and the Twitch Helix API; sign-ins are kept in a file only you can read on this PC",
 			ConnectionTypes: connectionTypes(),
 			Actions: []addon.ActionDef{
-				{ID: "show_on_screen", Label: "Show chat message on screen", MacroStep: true,
-					Description: "Put a chat message in the vMix title (SetText: Title, FromName, Message; SetImage: FromPhoto). No id: the newest message. Bringing the title on air stays a vMix overlay.",
-					Params:      []addon.Field{{Key: "id", Label: "Message id", Type: "text", Help: "Empty: the newest message."}}},
-				{ID: "clear_screen", Label: "Clear chat message from screen", MacroStep: true, Description: "Empty the vMix title's name, message and photo."},
+				{ID: "mark_on_screen", Label: "Mark chat message on screen",
+					Description: "Mark a message ON SCREEN (and pinned) on every screen. The Live chat + reply widget sends it after filling the vMix title through your vMix connection; it doesn't touch vMix itself.",
+					Params:      []addon.Field{{Key: "id", Label: "Message id", Type: "text", Required: true}}},
+				{ID: "clear_on_screen", Label: "Clear the on-screen mark", Description: "Take the ON SCREEN mark (and its pin) off on every screen. It doesn't touch vMix."},
 				{ID: "pin", Label: "Pin chat message", Description: "Keep a message at the top of the Live chat widget (every screen sees it).",
 					Params: []addon.Field{{Key: "id", Label: "Message id", Type: "text", Required: true}}},
 				{ID: "unpin", Label: "Unpin chat message", Description: "Take the pin off (a message on screen stays pinned until cleared)."},
@@ -228,10 +242,22 @@ func spec() addon.Spec {
 			},
 			Widgets: []addon.WidgetDef{
 				{Kind: addon.KindFrame, Type: "live_chat", Label: "Live chat",
-					Description: "Every platform's chat in one list, newest at the bottom, with a status chip per platform; Super Chats, bits, subs and rants in green. Tap a message to reply, show it on screen in vMix, pin it, or hide it here; message every platform at once from the box at the bottom.",
-					Entry:       "ui/chat.html", Size: &addon.Size{W: 5, H: 10}, MinPx: &addon.Size{W: 220, H: 180}, Sample: sampleState()},
+					Description: "Just the comments from every platform, big and easy to read. No reply box.",
+					Entry:       "ui/comments.html", Size: &addon.Size{W: 5, H: 10}, MinPx: &addon.Size{W: 220, H: 180}, Sample: commentsSample(),
+					Fields: []addon.Field{platformsField,
+						{Key: "tap", Label: "Let people tap comments", Type: addon.FieldBool, Default: false,
+							Help: "On: tapping a comment offers Pin and Hide here. Off: tapping does nothing."}}},
+				{Kind: addon.KindFrame, Type: "live_chat_reply", Label: "Live chat + reply",
+					Description: "The comments plus a reply box, Show on screen, Pin and Hide.",
+					Entry:       "ui/chat.html", Size: &addon.Size{W: 5, H: 10}, MinPx: &addon.Size{W: 220, H: 180}, Sample: replySample(),
+					Fields: []addon.Field{platformsField,
+						{Key: "vmix", Label: "vMix connection", Type: addon.FieldConnection, Addon: "vmix", Help: "For Show on screen. Blank: off."},
+						{Key: "vmixTitle", Label: "Title for comments", Type: addon.FieldSelect, OptionsFrom: "vmix.titles", OptionsConn: "vmix",
+							Help: "A GT title in vMix Social's layout: Message, FromName, Title, FromPhoto."},
+						{Key: "vmixHeading", Label: "Title heading", Type: addon.FieldText, Default: "Live Comments", Advanced: true,
+							Help: "Goes in the title's Title.Text field."}}},
 			},
-			Changelog: "First release: YouTube, Facebook, Twitch, Rumble and Owncast chat, each its own connection, merged in one Live chat widget, with replies (to one comment, or to every platform at once), Show on screen through a vMix title, pin and hide here, and a setup guide per platform.",
+			Changelog: "First release: YouTube, Facebook, Twitch, Rumble and Owncast chat, each its own connection with a setup guide, merged in two widgets: Live chat (just the comments, big) and Live chat + reply (replies to one comment or every platform at once, Show on screen through your vMix connection, pin and hide here).",
 		},
 		Open: map[string]addon.OpenFunc{
 			"chat":     func(raw json.RawMessage) (any, error) { return Open(raw) },

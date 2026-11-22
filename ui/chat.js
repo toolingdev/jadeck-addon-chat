@@ -1,17 +1,20 @@
-// Live chat: every platform connection (YouTube, Facebook, Twitch,
-// Rumble, Owncast) in one list, newest at the bottom (it follows new
-// messages unless you've scrolled up), Super Chats / bits / subs / rants
-// in green, the pinned / on-screen message in amber on top, and one
-// status chip per platform under the header. Tap a message for Reply,
-// Show on screen, Pin and Hide here. The composer at the bottom sends to
-// every platform that can reply (tap a chip to leave one out) or replies
-// to one message; the result card says what got through. In a small box
-// the composer opens over the widget from a Reply button in the header.
+// Live chat + reply: the widget's platforms (setting "platforms") in one
+// list, newest at the bottom (it follows new messages unless you've
+// scrolled up), Super Chats / bits / subs / rants in green, the pinned /
+// on-screen message in amber on top, and one status chip per platform
+// under the header. Tap a message for Reply, Show on screen, Pin and Hide
+// here. The composer at the bottom sends to every platform that can reply
+// (tap a chip to leave one out) or replies to one message; the result
+// card says what got through. In a small box the composer opens over the
+// widget from a Reply button in the header.
+// Show on screen fills the vMix title picked in this widget's settings
+// through the vMix connection picked there (K.actVia "vmix"), then marks
+// the message ON SCREEN on every screen (hub action mark_on_screen).
 // Header, buttons and status dot are the shared frame kit's (JK); the
-// list scrolls by drag / wheel without a scrollbar.
+// list scrolls by drag / wheel without a scrollbar (common.js).
 (function () {
   "use strict";
-  var K = window.Kit, JK = window.JK, main = document.getElementById("main");
+  var K = window.Kit, JK = window.JK, C = window.Chat, main = document.getElementById("main");
   if (!JK) { K.start(); return; }
 
   var hdr = JK.header({ title: "Live chat" });
@@ -28,32 +31,10 @@
   var res = K.el("div", "sendres"), comp = K.el("div", "composer");
   main.appendChild(chips); main.appendChild(errs); main.appendChild(pin); main.appendChild(wrap); main.appendChild(res); main.appendChild(comp); main.appendChild(foot);
 
-  var open = null, pinOpen = false, stick = true, lastSeen = "", drag = null, moved = false;
-  K.busy = function () { return !!(drag && moved); };
-
-  function hm(iso) {
-    var d = new Date(iso);
-    if (isNaN(d)) return "";
-    var h = d.getHours() % 12 || 12, m = d.getMinutes();
-    return h + ":" + (m < 10 ? "0" : "") + m;
-  }
-  var PLAT = {
-    youtube: { cls: "yt", name: "YouTube", letter: "" },
-    facebook: { cls: "fb", name: "Facebook", letter: "f" },
-    twitch: { cls: "tw", name: "Twitch", letter: "t" },
-    rumble: { cls: "rb", name: "Rumble", letter: "R" },
-    owncast: { cls: "oc", name: "Owncast", letter: "O" },
-    sample: { cls: "sm", name: "Sample chat", letter: "S" },
-    you: { cls: "me", name: "You", letter: "↩" }
-  };
-  var SHORT = { youtube: "YT", facebook: "FB", twitch: "TW", owncast: "OC", rumble: "RB" };
-  function plat(p) { return PLAT[p] || { cls: "sm", name: p || "", letter: "?" }; }
-  function badge(p) {
-    var d = plat(p), b = K.el("i", "badge " + d.cls);
-    b.setAttribute("aria-label", d.name);
-    if (d.letter) b.textContent = d.letter;
-    return b;
-  }
+  var open = null, pinOpen = false, stick = true, lastSeen = "", settings = {}, scrErr = "", scrErrTimer = 0;
+  var plat = C.plat, badge = C.badge, hm = C.hm, SHORT = C.SHORT, superLabel = C.superLabel;
+  var scroll = C.scroller(list, onScroll);
+  K.busy = scroll.busy;
 
   // one chip per source: green dot + viewers when live, hollow dot +
   // "waiting", red "!" + a short note on error; the full note in the tooltip
@@ -65,33 +46,62 @@
       var d = plat(s.platform), c = K.el("span", "chip " + d.cls + " " + (s.state || "waiting"));
       var mark = K.el("i", "mark", s.state === "error" ? "!" : "");
       c.appendChild(mark);
-      var name = d.name;
+      var name = chipsShort > 1 ? C.SHORT[s.platform] || d.name : d.name;
       if (s.label && s.platform !== "sample" && w >= 300 && !chipsShort) name += " " + s.label;
       c.appendChild(K.el("span", "cname", name));
       var tail = "";
       if (s.state === "live") tail = s.viewers != null && s.viewers >= 0 ? String(s.viewers) : "";
       else if (s.state === "error") tail = "";
-      else tail = "waiting";
+      else tail = chipsShort > 1 ? "" : "waiting";
       if (tail) c.appendChild(K.el("span", "ctail", tail));
       c.title = d.name + (s.label ? " (" + s.label + ")" : "") + ": " +
         (s.state === "live" ? "live" + (s.viewers >= 0 ? ", " + s.viewers + " watching" : "") : s.state || "") +
         (s.note ? " — " + s.note : "");
       chips.appendChild(c);
     });
-    // what's wrong, one line per platform with a problem (the chip only
-    // says which), in full words so it can be acted on
-    errs.textContent = "";
-    var bad = list.filter(function (s) { return s.state === "error" && s.note; });
-    errs.hidden = !bad.length;
-    bad.forEach(function (s) {
-      var d = plat(s.platform), n = (s.note || "").replace(/^(YouTube|Facebook|Twitch|Rumble|Owncast)( chat)?: /, "");
-      var line = K.el("div", "err", n.indexOf(d.name) === 0 ? n : d.name + ": " + n);
-      line.title = line.textContent;
-      errs.appendChild(line);
-    });
+    // what's wrong (the chip only says which), and a Show on screen
+    // that vMix refused
+    C.errLines(errs, list, [scrErr]);
   }
   function act(name, params) {
     return K.act(name, params).then(function () { open = null; pinOpen = false; K.draw(); }, function () {});
+  }
+
+  // ------------------------------------------------------ Show on screen
+  // Through the vMix connection and title picked in this widget's
+  // settings: the vMix add-on's title_text / title_image actions, then
+  // the hub marks it ON SCREEN for every screen.
+  function canShow() { return !!(settings.vmix && settings.vmixTitle); }
+  function vmixFailed(e) {
+    scrErr = "vMix: " + ((e && e.message) || "didn't answer");
+    clearTimeout(scrErrTimer);
+    scrErrTimer = setTimeout(function () { scrErr = ""; K.draw(); }, 15000);
+    K.draw();
+  }
+  function fillTitle(heading, name, text, photo) {
+    var input = settings.vmixTitle;
+    function setText(field, value) { return K.actVia("vmix", "title_text", { input: input, field: field, text: value }); }
+    return setText("Message.Text", text)
+      .then(function () { return setText("FromName.Text", name); })
+      .then(function () { return setText("Title.Text", heading); })
+      .then(function () {
+        // A title without a photo field refuses it; the text is up anyway.
+        // No picture (or clearing): empty it, so the last person's face
+        // doesn't stay next to someone else's words.
+        if (photo) return K.actVia("vmix", "title_image", { input: input, field: "FromPhoto.Source", path: photo }).catch(function () {});
+        return K.actVia("vmix", "run_function", { "function": "SetImage", input: input, selectedName: "FromPhoto.Source" }).catch(function () {});
+      });
+  }
+  function showOnScreen(m) {
+    if (!canShow()) return null;
+    var name = (m.author || "") + (m.super ? " · " + m.super : "");
+    return fillTitle(settings.vmixHeading || "Live Comments", name, m.text || "", m.avatar || "")
+      .then(function () { scrErr = ""; return act("mark_on_screen", { id: m.id }); }, vmixFailed);
+  }
+  function clearScreen() {
+    if (!canShow()) return act("clear_on_screen");
+    return fillTitle("", "", "", "")
+      .then(function () { scrErr = ""; return act("clear_on_screen"); }, vmixFailed);
   }
   function bottomGap() { return list.scrollHeight - list.clientHeight - list.scrollTop; }
   function toBottom() { list.scrollTop = list.scrollHeight; jump.hidden = true; jump.set({ label: "↓ Newest" }); }
@@ -130,12 +140,6 @@
     r.appendChild(body);
     return r;
   }
-  function superLabel(m) {
-    if (m.super === "Sub") return "SUB";
-    if (/bits$/.test(m.super)) return m.super.toUpperCase();
-    if (m.platform === "rumble") return "RANT " + m.super;
-    return "SUPER CHAT " + m.super;
-  }
   function canReplyOn(st, p) {
     return (st.sources || []).some(function (s) { return s.platform === p && s.canReply; });
   }
@@ -152,11 +156,12 @@
       a.appendChild(JK.button({ label: "Hide here", onClick: function () { return act("hide", { id: m.id }); } }));
       return a;
     }
-    var show = JK.button({ label: "Show on screen", tone: "accent", disabled: !st.canShow,
-      title: st.canShow ? "Put this message in the vMix title" : "Set the vMix title input in this connection's settings",
-      onClick: function () { return act("show_on_screen", { id: m.id }); } });
-    show.classList.add("show");
-    a.appendChild(show);
+    if (canShow()) {
+      var show = JK.button({ label: "Show on screen", tone: "accent", title: "Put this message in the vMix title",
+        onClick: function () { return showOnScreen(m); } });
+      show.classList.add("show");
+      a.appendChild(show);
+    }
     if (canReplyOn(st, m.platform)) {
       var rb = JK.button({ label: "↩ Reply", tone: "accent", title: "Reply on " + plat(m.platform).name + " only",
         onClick: function () { startReply(m); } });
@@ -172,7 +177,7 @@
   // Local to this screen: who's being answered, which chips are unticked,
   // what's typed. The composer is built once (typing survives redraws).
   var replyTo = null, off = {}, overlay = false, ovlOpen = false, compact = false, resCompact = false, lastSt = {}, sendErr = "", hiddenRes = {}, okTimer = null;
-  var MIN_LIST = 76, chipsShort = false;
+  var MIN_LIST = 76, chipsShort = 0; // 1: no labels, 2: short names
   var cHead = K.el("div", "chead"), cTo = K.el("div", "cto"), cRow = K.el("div", "crow"), cHint = K.el("div", "chint");
   var cLabel = K.el("span", "jk-smallcaps", "Send to"), cChips = K.el("div", "tchips");
   var cWho = K.el("span", "cwho");
@@ -321,6 +326,8 @@
     dis.classList.add("rdismiss");
     a.appendChild(dis);
     if (resCompact) top.appendChild(a); else res.appendChild(a);
+    // one line with no room for the chips: the title and Retry say enough
+    if (resCompact && rc.scrollWidth > rc.clientWidth + 1) rc.style.visibility = "hidden";
   }
 
   // ---------------------------------------------------------- the pinned
@@ -330,7 +337,7 @@
     pin.hidden = !p;
     if (!p) { pinOpen = false; return; }
     pin.classList.toggle("open", pinOpen);
-    pin.appendChild(K.el("div", "pinlabel", "📌 PINNED" + (p.onScreen ? " · " + (st.screenLabel || "on screen") : "")));
+    pin.appendChild(K.el("div", "pinlabel", "📌 PINNED" + (p.onScreen ? " · ON SCREEN" : "")));
     var t = K.el("div", "pintext");
     t.appendChild(K.el("b", "", p.author || ""));
     t.appendChild(document.createTextNode(" — " + (p.text || "") + (p.super ? " (" + p.super + ")" : "")));
@@ -338,19 +345,24 @@
     if (!pinOpen) return;
     var a = K.el("div", "acts");
     if (p.onScreen) {
-      a.appendChild(JK.button({ label: "Take off screen", onClick: function () { return act("clear_screen"); } }));
+      // another screen may have put it up: clearing from here needs this
+      // widget's vMix too (else only the other screen can)
+      if (canShow()) a.appendChild(JK.button({ label: "Clear from screen", onClick: function () { return clearScreen(); } }));
     } else {
-      var show = JK.button({ label: "Show on screen", tone: "accent", disabled: !st.canShow, onClick: function () { return act("show_on_screen", { id: p.id }); } });
-      show.classList.add("show");
-      a.appendChild(show);
+      if (canShow()) {
+        var show = JK.button({ label: "Show on screen", tone: "accent", onClick: function () { return showOnScreen(p); } });
+        show.classList.add("show");
+        a.appendChild(show);
+      }
       a.appendChild(JK.button({ label: "Unpin", onClick: function () { return act("unpin"); } }));
     }
-    pin.appendChild(a);
+    if (a.childNodes.length) pin.appendChild(a);
   }
 
   // -------------------------------------------------------------- render
-  K.render = function (st) {
+  K.render = function (st, set) {
     st = st || {};
+    settings = set || {};
     var w = main.clientWidth, h = main.clientHeight + 26;
     var right = [];
     if (st.watching != null && w >= 300) right.push(st.watching + " watching");
@@ -364,22 +376,43 @@
     document.body.classList.toggle("short", h < 240);
     document.body.classList.toggle("narrow", w < 300);
     document.body.classList.toggle("tall", h >= 420 && !overlay);
-    chipsShort = false;
+    errs.classList.remove("tight");
+    pin.classList.remove("tight");
+    chipsShort = 0;
     drawChips(st, w);
     st.messages = Array.isArray(st.messages) ? st.messages : [];
     lastSt = st;
     var composing = drawComposer(st);
     drawResult(st);
-    // the list keeps room for a few lines: else the result card goes to
-    // one line, then the composer moves over the widget (header button)
-    if (wrap.clientHeight < MIN_LIST && w >= 300) { chipsShort = true; drawChips(st, w); }
-    if (wrap.clientHeight < MIN_LIST && !res.hidden && !resCompact) { resCompact = true; drawResult(st); }
-    if (wrap.clientHeight < MIN_LIST && !overlay && !comp.hidden) { overlay = compact = true; composing = drawComposer(st); }
+    drawPin(st);
+    var hidden = st.hiddenCount || 0;
+    unhide.set({ label: "Show " + hidden + " hidden" });
+    unhide.hidden = !hidden;
+    footNote.textContent = st.sample
+      ? "Sample chat: add a YouTube, Facebook, Twitch, Rumble or Owncast chat connection."
+      : composing ? "" : "To reply from here: sign in under Settings → Connections (YouTube, Twitch), or see Facebook and Owncast there.";
+    foot.hidden = !footNote.textContent && !hidden;
+
+    // the list keeps room for a few lines; else, one step at a time: the
+    // chips drop their labels, the result card goes to one line, the
+    // composer moves over the widget (header button), the error lines and
+    // the pin go to one line, the chips to short names, the footer goes,
+    // then the error lines (the chips still say which platform is wrong),
+    // and last the chips
+    var steps = [
+      function () { chipsShort = 1; drawChips(st, w); },
+      function () { if (!res.hidden && !resCompact) { resCompact = true; drawResult(st); } },
+      function () { if (!overlay && !comp.hidden) { overlay = compact = true; composing = drawComposer(st); } },
+      function () { errs.classList.add("tight"); pin.classList.add("tight"); },
+      function () { chipsShort = 2; drawChips(st, w); },
+      function () { foot.hidden = true; },
+      function () { errs.hidden = true; },
+      function () { chips.hidden = true; } // the header's dot still says something is wrong
+    ];
+    for (var i = 0; i < steps.length && wrap.clientHeight < MIN_LIST; i++) steps[i]();
     if (wrap.clientHeight < 40 && !res.hidden) res.hidden = true; // no room: the ✓ / ✕ under the message stay
     if (!overlay) ovlOpen = false;
     ovlBtn.hidden = !(overlay && composing);
-
-    drawPin(st);
 
     var msgs = Array.isArray(st.messages) ? st.messages : [];
     var newest = msgs.length ? msgs[msgs.length - 1].id : "";
@@ -396,45 +429,9 @@
     if (!wasStuck && newest !== lastSeen && lastSeen) jump.set({ label: "↓ New messages" });
     jump.hidden = wasStuck;
     lastSeen = newest;
-
-    var hidden = st.hiddenCount || 0;
-    unhide.set({ label: "Show " + hidden + " hidden" });
-    unhide.hidden = !hidden;
-    footNote.textContent = st.sample
-      ? "Sample chat: add a YouTube, Facebook, Twitch, Rumble or Owncast chat connection."
-      : composing ? "" : "To reply from here: sign in under Settings → Connections (YouTube, Twitch), or see Facebook and Owncast there.";
-    foot.hidden = !footNote.textContent && !hidden;
   };
 
-  // ------------------------------------------------- touch, wheel, keys
-  list.addEventListener("pointerdown", function (e) {
-    if (e.button || e.target.closest(".jk-btn")) return;
-    drag = { y: e.clientY, top: list.scrollTop, id: e.pointerId };
-    moved = false;
-  });
-  list.addEventListener("pointermove", function (e) {
-    if (!drag) return;
-    var dy = e.clientY - drag.y;
-    if (!moved && Math.abs(dy) > 6) {
-      moved = true;
-      try { list.setPointerCapture(drag.id); } catch (x) { /* fine */ }
-    }
-    if (moved) { list.scrollTop = drag.top - dy; onScroll(); }
-  });
-  function endDrag() {
-    if (!drag) return;
-    drag = null;
-    if (moved) setTimeout(function () { moved = false; K.idle(); }, 0);
-  }
-  list.addEventListener("pointerup", endDrag);
-  list.addEventListener("pointercancel", endDrag);
-  list.addEventListener("lostpointercapture", endDrag);
-  list.addEventListener("wheel", function (e) {
-    var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * list.clientHeight : e.deltaY;
-    var before = list.scrollTop;
-    list.scrollTop += dy;
-    if (list.scrollTop !== before) { e.preventDefault(); onScroll(); }
-  }, { passive: false });
+  // ------------------------------------------------------- taps, keys
   function toggle(id) {
     open = open === id ? null : id;
     K.draw();
@@ -447,14 +444,13 @@
     }
   }
   list.addEventListener("click", function (e) {
-    if (moved || K.editing || e.target.closest(".jk-btn")) return;
+    if (scroll.moved() || K.editing || e.target.closest(".jk-btn")) return;
     var r = e.target.closest(".msg");
     if (r) toggle(r.dataset.id);
   });
   list.addEventListener("keydown", function (e) {
     var r = e.target.closest && e.target.closest(".msg");
     if (r && e.target === r && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggle(r.dataset.id); }
-    if (e.key === "PageUp" || e.key === "PageDown") { e.preventDefault(); list.scrollTop += (e.key === "PageUp" ? -1 : 1) * list.clientHeight * 0.8; onScroll(); }
   });
   pin.addEventListener("click", function (e) {
     if (K.editing || e.target.closest(".jk-btn")) return;

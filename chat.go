@@ -1,8 +1,10 @@
 package main
 
-// A Live chat connection (the hub): the merged chat of every platform
-// connection, the vMix title, and the state and actions behind the Live
-// chat widget.
+// The Live chat hub: an automatic connection (the controller makes it;
+// it has no settings) that merges every platform connection, and the
+// state and actions behind the Live chat and Live chat + reply widgets.
+// Show on screen is the reply widget's own: its frame fills a title
+// through the user's vMix connection and then marks the message here.
 
 import (
 	"context"
@@ -17,29 +19,16 @@ import (
 	"github.com/toolingdev/jadeck/sdk/addon"
 )
 
-// config is the Live chat connection's settings: only vMix now; each
-// platform is a connection of its own.
-type config struct {
-	VmixHost      string `json:"vmixHost"`
-	VmixTitle     string `json:"vmixTitle"`
-	VmixTitleText string `json:"vmixTitleText"`
-	VmixUser      string `json:"vmixUser"`
-	VmixPassword  string `json:"vmixPassword"`
-}
-
 // shownLimit is how many messages the widget gets.
 const shownLimit = 100
 
 // samplePrefix starts every sample message's id.
 const samplePrefix = "sample:"
 
-// Conn is one Live chat connection (a hub): it merges every platform
-// connection open in this add-on process, or plays the sample chat when
-// there is none.
+// Conn is the Live chat hub: it merges every platform connection open
+// in this add-on process, or plays the sample chat when there is none.
 type Conn struct {
-	cfg   config
 	store *store
-	vmix  *vmixClient
 
 	mu        sync.Mutex
 	feeds     map[string]feedView // open platform feeds, by feed id
@@ -47,9 +36,6 @@ type Conn struct {
 	sampleSt  sourceStatus
 	sampleGen int
 	fakeStop  func() // stops the sample chat (nil when it isn't running)
-	vmixErr   string // the last vMix problem ("" fine)
-	vmixOK    bool
-	vmixReady chan struct{}
 	waited    bool
 	closed    bool
 
@@ -61,36 +47,12 @@ type Conn struct {
 
 	nmu    sync.Mutex
 	notify addon.Notifier
-
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
 }
 
-// Open starts a Live chat connection from its settings.
-func Open(raw json.RawMessage) (*Conn, error) {
-	var cfg config
-	if err := readConfig(raw, &cfg); err != nil {
-		return nil, err
-	}
-	vm, err := newVmix(cfg.VmixHost, cfg.VmixTitle, cfg.VmixTitleText, cfg.VmixUser, cfg.VmixPassword)
-	if err != nil {
-		return nil, err
-	}
-	c := &Conn{cfg: cfg, store: newStore(), vmix: vm, feeds: map[string]feedView{}, vmixReady: make(chan struct{}), sends: map[string]*sendRecord{}}
-	ctx, cancel := context.WithCancel(context.Background())
-	c.cancel = cancel
-	if vm.input != "" {
-		c.wg.Add(1)
-		go func() {
-			defer c.wg.Done()
-			pctx, done := context.WithTimeout(ctx, 4*time.Second)
-			defer done()
-			c.setVmix(vm.ping(pctx))
-			close(c.vmixReady)
-		}()
-	} else {
-		close(c.vmixReady)
-	}
+// Open starts the hub. It has no settings (an Auto connection type); an
+// old saved config is ignored.
+func Open(json.RawMessage) (*Conn, error) {
+	c := &Conn{store: newStore(), feeds: map[string]feedView{}, sends: map[string]*sendRecord{}}
 	reg.subscribe(c)
 	c.startSample() // only when no platform connection is open
 	return c, nil
@@ -107,10 +69,6 @@ func (c *Conn) Close() error {
 	if stop != nil {
 		stop()
 	}
-	if c.cancel != nil {
-		c.cancel()
-	}
-	c.wg.Wait()
 	return nil
 }
 
@@ -230,16 +188,6 @@ func (c *Conn) feedGone(id string) {
 	c.changed()
 }
 
-func (c *Conn) setVmix(err error) {
-	c.mu.Lock()
-	if err != nil {
-		c.vmixErr, c.vmixOK = err.Error(), false
-	} else {
-		c.vmixErr, c.vmixOK = "", true
-	}
-	c.mu.Unlock()
-}
-
 // ---------------------------------------------------------------- state
 
 // wireMessage is a message as the widget gets it.
@@ -250,6 +198,7 @@ type wireMessage struct {
 	At       string     `json:"at"`
 	Text     string     `json:"text"`
 	Super    string     `json:"super,omitempty"`
+	Avatar   string     `json:"avatar,omitempty"` // http(s) only (Show on screen's FromPhoto)
 	OnScreen bool       `json:"onScreen,omitempty"`
 	Mine     bool       `json:"mine,omitempty"`    // sent from jadeck ("YOU · <account>")
 	Sent     []sentMark `json:"sent,omitempty"`    // mine: ✓ / ✕ per platform
@@ -257,8 +206,12 @@ type wireMessage struct {
 }
 
 func wire(m Message) wireMessage {
-	return wireMessage{ID: m.ID, Platform: m.Platform, Author: m.Author, At: m.At.UTC().Format(time.RFC3339), Text: m.Text, Super: m.Super,
+	w := wireMessage{ID: m.ID, Platform: m.Platform, Author: m.Author, At: m.At.UTC().Format(time.RFC3339), Text: m.Text, Super: m.Super,
 		Mine: m.Mine, Sent: m.Sent, ReplyTo: m.ReplyTo}
+	if strings.HasPrefix(m.Avatar, "https://") || strings.HasPrefix(m.Avatar, "http://") {
+		w.Avatar = m.Avatar
+	}
+	return w
 }
 
 // wireSource is one status chip in the widget's header.
@@ -274,8 +227,22 @@ type wireSource struct {
 	ReplyWhy string `json:"replyWhy,omitempty"` // why it can't ("not signed in", "read only")
 }
 
-// AddonState is the Live chat widget's state.
+// AddonState is the hub's state with every platform (Test, and a widget
+// that sends no settings).
 func (c *Conn) AddonState(ctx context.Context) (map[string]any, error) {
+	return c.AddonStateFor(ctx, nil)
+}
+
+// AddonStateFor (addon.SettingsStater) is one widget's state: only the
+// platforms its "platforms" field names (empty: all).
+func (c *Conn) AddonStateFor(ctx context.Context, settings map[string]any) (map[string]any, error) {
+	c.firstWait(ctx)
+	return c.state(platformFilter(settings)), nil
+}
+
+// firstWait: the first ask (often Test right after Open) lets every
+// source look once.
+func (c *Conn) firstWait(ctx context.Context) {
 	c.mu.Lock()
 	first := !c.waited
 	c.waited = true
@@ -284,8 +251,7 @@ func (c *Conn) AddonState(ctx context.Context) (map[string]any, error) {
 		waits = append(waits, v.ready)
 	}
 	c.mu.Unlock()
-	if first { // the first ask (often Test right after Open): let every source look once
-		waits = append(waits, c.vmixReady)
+	if first {
 		t := time.NewTimer(6 * time.Second)
 	wait:
 		for _, ch := range waits {
@@ -299,7 +265,81 @@ func (c *Conn) AddonState(ctx context.Context) (map[string]any, error) {
 		}
 		t.Stop()
 	}
-	return c.state(), nil
+}
+
+// filter is the platforms one widget shows; nil shows every one.
+type filter map[string]bool
+
+// platformFilter reads a widget's "platforms" setting: a list (or a
+// comma list) of platform ids. Nothing known in it: every platform.
+func platformFilter(settings map[string]any) filter {
+	var names []string
+	switch v := settings["platforms"].(type) {
+	case []any:
+		for _, x := range v {
+			if s, ok := x.(string); ok {
+				names = append(names, s)
+			}
+		}
+	case []string:
+		names = v
+	case string:
+		names = strings.Split(v, ",")
+	}
+	f := filter{}
+	for _, n := range names {
+		if n = strings.ToLower(strings.TrimSpace(n)); platformNames[n] != "" && n != "sample" {
+			f[n] = true
+		}
+	}
+	if len(f) == 0 {
+		return nil
+	}
+	return f
+}
+
+// has: the widget shows this platform.
+func (f filter) has(plat string) bool { return f == nil || f[plat] }
+
+// keeps: the widget shows this message. One sent from jadeck shows where
+// it went to one of the widget's platforms (or while it's still going).
+func (f filter) keeps(m Message) bool {
+	if f == nil {
+		return true
+	}
+	if m.Mine {
+		if len(m.Sent) == 0 {
+			return true
+		}
+		for _, s := range m.Sent {
+			if f[s.Platform] {
+				return true
+			}
+		}
+		return false
+	}
+	return f[m.Platform]
+}
+
+// platforms is the filter as a list (nil: all).
+func (f filter) platforms() []string {
+	if f == nil {
+		return nil
+	}
+	out := make([]string, 0, len(f))
+	for p := range f {
+		out = append(out, p)
+	}
+	return out
+}
+
+// chipsFor is chips() on the widget's platforms only; c.mu held.
+func (c *Conn) chipsFor(f filter) []feedView {
+	out := c.chips()
+	if f != nil {
+		out = slices.DeleteFunc(out, func(v feedView) bool { return !f.has(v.plat) })
+	}
+	return out
 }
 
 // chips is the open feeds, oldest first, one per platform + label (a
@@ -327,8 +367,12 @@ func (c *Conn) chips() []feedView {
 	return out
 }
 
-func (c *Conn) state() map[string]any {
-	v := c.store.view(shownLimit)
+func (c *Conn) state(f filter) map[string]any {
+	var keep func(Message) bool
+	if f != nil {
+		keep = f.keeps
+	}
+	v := c.store.viewFor(shownLimit, keep, f.platforms())
 	msgs := make([]wireMessage, 0, len(v.messages))
 	for _, m := range v.messages {
 		msgs = append(msgs, wire(m))
@@ -346,7 +390,7 @@ func (c *Conn) state() map[string]any {
 	live, bad, watching, canSend := false, false, -1, false
 	sources := []wireSource{}
 	seenName := map[string]bool{}
-	for _, f := range c.chips() {
+	for _, f := range c.chipsFor(f) {
 		st := f.st
 		ws := wireSource{Platform: f.plat, Label: f.label, State: st.State, Note: st.Note, Viewers: st.Viewers, ID: f.id, ReplyWhy: "read only"}
 		if f.rep != nil {
@@ -405,16 +449,11 @@ func (c *Conn) state() map[string]any {
 	case len(c.feeds) == 0:
 		note = "No platform connection open (add YouTube, Facebook, Twitch, Rumble or Owncast chat)"
 		details = []string{"No platform connection open"}
+	case len(sources) == 0:
+		note = "None of this widget's platforms is connected"
+		details = []string{"No connection for this widget's platforms"}
 	case !live:
 		note = "Waiting for a live stream"
-	}
-	switch {
-	case c.vmix.input == "":
-		details = append(details, "vMix: no title input set (Show on screen is off)")
-	case c.vmixErr != "":
-		details = append(details, "vMix: "+c.vmixErr)
-	case c.vmixOK:
-		details = append(details, "vMix: answered")
 	}
 	st := map[string]any{
 		"connected":   true,
@@ -428,9 +467,6 @@ func (c *Conn) state() map[string]any {
 		"messages":    msgs,
 		"pinned":      pinned,
 		"hiddenCount": v.hiddenN,
-		"canShow":     c.vmix.input != "",
-		"screenLabel": "on screen in vMix (" + c.vmix.input + ")",
-		"vmixError":   c.vmixErr,
 		"detail":      strings.Join(details, " · "),
 		"canSend":     canSend && !c.sample,
 		"lastSend":    c.lastSendState(),
@@ -486,30 +522,16 @@ func (c *Conn) AddonAction(ctx context.Context, name string, params json.RawMess
 	}
 	defer c.changed()
 	switch name {
-	case "show_on_screen":
-		var m Message
-		var err error
-		if p.ID == "" {
-			var ok bool
-			if m, ok = c.store.latest(); !ok {
-				return nil, errors.New("there are no chat messages yet")
-			}
-		} else if m, err = msg(); err != nil {
-			return nil, err
-		}
-		err = c.vmix.show(ctx, m)
-		c.setVmix(err)
+	case "mark_on_screen":
+		// The reply widget filled the vMix title itself (through the
+		// user's vMix connection); every screen now marks it ON SCREEN.
+		m, err := msg()
 		if err != nil {
 			return nil, err
 		}
 		c.store.setOnScreen(m)
-		return map[string]any{"ok": true, "id": m.ID, "author": m.Author}, nil
-	case "clear_screen":
-		err := c.vmix.clear(ctx)
-		c.setVmix(err)
-		if err != nil {
-			return nil, err
-		}
+		return map[string]any{"ok": true, "id": m.ID}, nil
+	case "clear_on_screen":
 		c.store.clearScreen()
 		return map[string]any{"ok": true}, nil
 	case "pin":

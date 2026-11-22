@@ -2,9 +2,10 @@ package main
 
 // The in-process hub: every platform connection (YouTube, Facebook,
 // Twitch, Rumble, Owncast) open in this add-on process registers its
-// source here as a feed, and every Live chat connection (a hub)
-// subscribes. A source runs once and fans out to all hubs; adding or
-// removing one platform connection never restarts the others.
+// source here as a feed, and the Live chat hub (the automatic "chat"
+// connection; in tests, several) subscribes. A source runs once and fans
+// out to all hubs; adding or removing one platform connection never
+// restarts the others.
 //
 // Everything a feed tells the hubs is delivered while holding reg.mu, so
 // a hub sees a feed's arrival, messages, statuses and departure in order
@@ -57,7 +58,7 @@ func (f *feed) view() feedView {
 	return v
 }
 
-// hub is what a Live chat connection does for the registry.
+// hub is what the Live chat hub does for the registry.
 type hub interface {
 	feedAdded(v feedView, backlog []Message)
 	feedMessages(msgs []Message)
