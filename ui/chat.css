@@ -1,0 +1,93 @@
+/* Live chat. Dark only; colours are the dashboard's (kit variables).
+   Nothing under 10px; the message list is the only thing that moves
+   (dragged / wheeled, no scrollbar). */
+#main { display: flex; flex-direction: column; gap: 8px; }
+
+/* pinned / on screen: amber */
+.pin { flex: none; border: 1px solid var(--color-accent); border-radius: 10px; padding: 7px 10px;
+  background: color-mix(in srgb, var(--color-accent) 11%, var(--color-panel)); cursor: pointer; min-width: 0; }
+.pin[hidden] { display: none; }
+.pinlabel { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--color-accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pintext { margin-top: 2px; font-size: 14px; line-height: 1.3; color: color-mix(in srgb, var(--color-accent) 70%, var(--color-fg));
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.pintext b { font-weight: 600; }
+
+/* the list */
+.listwrap { flex: 1; min-height: 0; position: relative; }
+.list { position: absolute; inset: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; touch-action: none; overscroll-behavior: contain; }
+.list > .jk-empty { flex: 1; }
+.msg { flex: none; display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; min-width: 0;
+  background: var(--color-panel-2); border: 1px solid transparent; cursor: pointer; outline-offset: -2px; }
+.msg:first-child { margin-top: auto; } /* few messages: they sit at the bottom */
+.msg.open { border-color: var(--color-line-strong); }
+.msg.super { border-color: color-mix(in srgb, var(--color-pvw) 75%, transparent); background: color-mix(in srgb, var(--color-pvw) 9%, var(--color-panel)); }
+.body { flex: 1; min-width: 0; }
+.meta { font-size: 12px; line-height: 16px; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg.super .meta { color: var(--color-good); font-weight: 700; }
+.meta .amt { color: var(--color-good); font-weight: 700; }
+.text { font-size: 14px; line-height: 1.3; color: var(--color-fg); overflow-wrap: anywhere; }
+
+/* platform badges */
+.badge { flex: none; width: 24px; height: 24px; border-radius: 6px; position: relative; margin-top: 2px;
+  font: normal 800 16px/24px var(--font-sans); text-align: center; color: #fff; }
+.badge.yt { background: #e5383b; }
+.badge.yt::after { content: ""; position: absolute; left: 9px; top: 7px; border-left: 8px solid #fff; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+.badge.fb { background: #2d7ff9; }
+.badge.tw { background: #9146ff; }
+.badge.rb { background: #3f9b3a; }
+.badge.oc { background: #c97c10; }
+.badge.sm { background: var(--color-line-strong); }
+
+/* author names in the platform's colour */
+.who.yt { color: #f87171; }
+.who.fb { color: #60a5fa; }
+.who.tw { color: #a78bfa; }
+.who.rb { color: #4ade80; }
+.who.oc { color: #f5a524; }
+.msg.super .meta .who { font-weight: 700; }
+
+/* one status chip per platform, under the header; they wrap, never overflow */
+.chips { flex: none; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; margin-top: -4px; }
+.chips[hidden] { display: none; }
+.errs { flex: none; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.errs[hidden] { display: none; }
+.errs .err { font-size: 11px; line-height: 1.35; color: var(--color-bad); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; height: 18px; padding: 0 7px 0 6px;
+  border-radius: 9px; border: 1px solid var(--color-line); background: var(--color-panel-2);
+  font-size: 10px; line-height: 16px; font-weight: 700; letter-spacing: .03em; color: var(--color-muted); white-space: nowrap; }
+.chip .cname { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.chip .ctail { flex: none; font-weight: 600; color: var(--color-dim); max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.chip .mark { flex: none; width: 7px; height: 7px; border-radius: 50%; box-sizing: border-box; font-style: normal; }
+.chip.live .mark { background: var(--color-good); }
+.chip.live .ctail { color: var(--color-fg); }
+.chip.waiting .mark { border: 1.5px solid var(--color-dim); }
+.chip.error { border-color: color-mix(in srgb, var(--color-bad) 60%, transparent); color: var(--color-bad); }
+.chip.error .mark { width: auto; height: auto; border-radius: 0; font-weight: 900; font-size: 11px; line-height: 16px; color: var(--color-bad); }
+.chip.error .ctail { color: var(--color-bad); }
+
+/* a tapped message's buttons (kit buttons) */
+.acts { display: flex; gap: 8px; margin-top: 8px; min-width: 0; }
+.acts .jk-btn { flex: 0 1 auto; min-width: 0; padding: 4px 12px; font-size: 13px; }
+.acts .jk-btn.show { flex-shrink: 0.5; }
+.pin .acts { margin-top: 6px; }
+
+/* back to the newest */
+.jump { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); padding: 4px 14px; box-shadow: 0 4px 12px rgb(0 0 0 / .5); }
+.jump:active { transform: translateX(-50%) scale(.97); }
+.jump[hidden] { display: none; }
+
+/* footer */
+.foot { flex: none; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.footnote { flex: 1; min-width: 0; font-size: 11px; line-height: 1.3; color: var(--color-dim);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.unhide { flex: none; padding: 4px 10px; }
+.unhide[hidden] { display: none; }
+
+/* short boxes: the footer goes, the pin is one line */
+body.short .foot { display: none; }
+body.short .pintext { -webkit-line-clamp: 1; }
+body.short .pin { padding: 5px 10px; }
+body.short #main { gap: 6px; }
+body.narrow .msg { gap: 8px; padding: 7px 8px; }
+body.narrow .acts { gap: 6px; }
+body.narrow .acts .jk-btn { padding: 4px 8px; }

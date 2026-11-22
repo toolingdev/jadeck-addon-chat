@@ -1,0 +1,5 @@
+bin/
+dist/
+addon.json
+/jadeck-addon-chat
+/jadeck-addon-chat.exe
