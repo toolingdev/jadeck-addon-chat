@@ -63,6 +63,28 @@
   // momentum) and by mouse drag, wheel and Page keys, never a visible
   // scrollbar. onScroll runs after each move. s.busy(): a scroll is under
   // way (don't redraw); s.moved(): the last press was a drag, not a tap.
+  // fillRows: puts one row per message in list, in order, reusing the
+  // row already there when nothing it shows changed (sig(m) the same; a
+  // null sig always rebuilds). Rows aren't torn down on every update, so a
+  // finger or a glide on the list isn't cut off by a new comment.
+  C.fillRows = function (list, msgs, build, sig) {
+    var old = list._rows || {}, rows = {}, want = [];
+    msgs.forEach(function (m) {
+      var s = sig(m), o = old[m.id], el;
+      el = o && s !== null && o.sig === s && o.el.parentNode === list ? o.el : build(m);
+      rows[m.id] = { sig: s, el: el };
+      want.push(el);
+    });
+    list._rows = rows;
+    var cur = list.firstChild;
+    want.forEach(function (el) {
+      if (el === cur) cur = cur.nextSibling;
+      else list.insertBefore(el, cur);
+    });
+    while (cur) { var next = cur.nextSibling; list.removeChild(cur); cur = next; }
+  };
+  C.clearRows = function (list) { list._rows = {}; list.textContent = ""; };
+
   C.scroller = function (list, onScroll) {
     var drag = null, moved = false, lastScroll = 0, settle = 0;
     function release() { moved = false; K.idle(); }
@@ -101,7 +123,9 @@
       if (e.key === "PageUp" || e.key === "PageDown") { e.preventDefault(); list.scrollTop += (e.key === "PageUp" ? -1 : 1) * list.clientHeight * 0.8; }
     });
     return {
-      busy: function () { return !!(drag && moved) || Date.now() - lastScroll < 180; },
+      // a finger on the list (even before it moves) or a glide still going:
+      // a redraw now would pull rows out from under the gesture
+      busy: function () { return !!drag || Date.now() - lastScroll < 250; },
       moved: function () { return moved; }
     };
   };

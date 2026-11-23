@@ -146,11 +146,12 @@
     var newest = msgs.length ? msgs[msgs.length - 1].id : "";
     var keep = list.scrollTop, wasStuck = stick;
     if (open && !msgs.some(function (m) { return m.id === open; })) open = null;
-    list.textContent = "";
     if (!msgs.length) {
+      C.clearRows(list);
       list.appendChild(K.el("div", "jk-empty", st.connected === false ? (st.error || "Not connected") : st.note || "Waiting for comments…"));
     } else {
-      msgs.forEach(function (m) { list.appendChild(row(m)); });
+      var how = [tap, ack].join();
+      C.fillRows(list, msgs, row, function (m) { return tap && m.id === open ? null : how + JSON.stringify(m); });
     }
     if (wasStuck) toBottom(); else list.scrollTop = keep;
     if (!wasStuck && newest !== lastSeen && lastSeen) jump.set({ label: "↓ New comments" });

@@ -418,11 +418,13 @@
     var newest = msgs.length ? msgs[msgs.length - 1].id : "";
     var keep = list.scrollTop, wasStuck = stick;
     if (open && !msgs.some(function (m) { return m.id === open; })) open = null;
-    list.textContent = "";
     if (!msgs.length) {
+      C.clearRows(list);
       list.appendChild(K.el("div", "jk-empty", st.connected === false ? (st.error || "Not connected") : st.note || "Waiting for chat messages…"));
     } else {
-      msgs.forEach(function (m) { list.appendChild(row(m, st)); });
+      // a row shows its badge, text and (open) its buttons; the open one
+      // depends on more of the state, so it's always made fresh
+      C.fillRows(list, msgs, function (m) { return row(m, st); }, function (m) { return m.id === open ? null : JSON.stringify(m); });
     }
     if (wasStuck) toBottom(); else list.scrollTop = keep;
     // scrolled up: a way back down, saying so when new ones came in

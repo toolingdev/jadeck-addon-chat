@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- **Swipes stick on phones:** a new comment used to rebuild the whole list,
+  which cut off a swipe that had just started (it took two or three tries to
+  scroll). Rows already there now stay put, and nothing redraws while a
+  finger is on the list or it's still gliding.
+
 ## 0.2.1
 
 - **Faster scrolling on phones and tablets:** the Live chat lists use the
