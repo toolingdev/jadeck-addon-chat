@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- **Faster scrolling on phones and tablets:** the Live chat lists use the
+  device's own scrolling, so a flick glides through a long chat instead of
+  moving only as far as your finger. Mouse drag, wheel and Page keys work as
+  before.
+
 ## 0.2.0
 
 - **Tick comments off (✓):** a Live chat widget setting for the speaker.

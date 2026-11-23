@@ -13,7 +13,7 @@ import (
 )
 
 // Version is set by the release build.
-var Version = "0.2.0"
+var Version = "0.2.1"
 
 func main() { addon.Serve(spec()) }
 
@@ -262,7 +262,7 @@ func spec() addon.Spec {
 						{Key: "vmixHeading", Label: "Title heading", Type: addon.FieldText, Default: "Live Comments", Advanced: true,
 							Help: "Goes in the title's Title.Text field."}}},
 			},
-			Changelog: "0.2.0: Tick comments off (✓) in the Live chat widget: new ones outlined, ticked ones fade on every screen, a NEW count and New only. 0.1.0: first release: YouTube, Facebook, Twitch, Rumble and Owncast chat, each its own connection with a setup guide, merged in two widgets: Live chat (just the comments, big) and Live chat + reply (replies to one comment or every platform at once, Show on screen through your vMix connection, pin and hide here).",
+			Changelog: "0.2.1: Comment lists scroll the phone's own way: flick and they glide. 0.2.0: Tick comments off (✓) in the Live chat widget: new ones outlined, ticked ones fade on every screen, a NEW count and New only. 0.1.0: first release: YouTube, Facebook, Twitch, Rumble and Owncast chat, each its own connection with a setup guide, merged in two widgets: Live chat (just the comments, big) and Live chat + reply (replies to one comment or every platform at once, Show on screen through your vMix connection, pin and hide here).",
 		},
 		Open: map[string]addon.OpenFunc{
 			"chat":     func(raw json.RawMessage) (any, error) { return Open(raw) },
