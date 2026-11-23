@@ -15,7 +15,9 @@
 
 /* the list */
 .listwrap { flex: 1; min-height: 0; position: relative; }
-.list { position: absolute; inset: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; touch-action: none; overscroll-behavior: contain; }
+.list { position: absolute; inset: 0; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.list::-webkit-scrollbar { display: none; }
 .list > .jk-empty { flex: 1; }
 .msg { flex: none; display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; min-width: 0;
   background: var(--color-panel-2); border: 1px solid transparent; cursor: pointer; outline-offset: -2px; }

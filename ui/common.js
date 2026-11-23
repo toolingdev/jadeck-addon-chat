@@ -59,14 +59,16 @@
     errs.hidden = !errs.childNodes.length;
   };
 
-  // scroller: the list moves by drag (touch or mouse) and wheel, never a
-  // scrollbar. onScroll runs after each move. s.busy(): a drag is under
+  // scroller: the list scrolls natively on touch (the phone's own flick and
+  // momentum) and by mouse drag, wheel and Page keys, never a visible
+  // scrollbar. onScroll runs after each move. s.busy(): a scroll is under
   // way (don't redraw); s.moved(): the last press was a drag, not a tap.
   C.scroller = function (list, onScroll) {
-    var drag = null, moved = false;
+    var drag = null, moved = false, lastScroll = 0, settle = 0;
+    function release() { moved = false; K.idle(); }
     list.addEventListener("pointerdown", function (e) {
       if (e.button || e.target.closest(".jk-btn")) return;
-      drag = { y: e.clientY, top: list.scrollTop, id: e.pointerId };
+      drag = { y: e.clientY, top: list.scrollTop, id: e.pointerId, touch: e.pointerType !== "mouse" };
       moved = false;
     });
     list.addEventListener("pointermove", function (e) {
@@ -74,27 +76,33 @@
       var dy = e.clientY - drag.y;
       if (!moved && Math.abs(dy) > 6) {
         moved = true;
-        try { list.setPointerCapture(drag.id); } catch (x) { /* fine */ }
+        if (!drag.touch) { try { list.setPointerCapture(drag.id); } catch (x) { /* fine */ } }
       }
-      if (moved) { list.scrollTop = drag.top - dy; onScroll(); }
+      if (moved && !drag.touch) list.scrollTop = drag.top - dy; // touch: the browser scrolls
     });
     function endDrag() {
       if (!drag) return;
+      var touch = drag.touch;
       drag = null;
-      if (moved) setTimeout(function () { moved = false; K.idle(); }, 0);
+      // a flick keeps gliding after the finger lifts: the scroll listener
+      // ends it; a mouse drag ends here
+      if (moved && !touch) setTimeout(release, 0);
     }
     list.addEventListener("pointerup", endDrag);
     list.addEventListener("pointercancel", endDrag);
     list.addEventListener("lostpointercapture", endDrag);
-    list.addEventListener("wheel", function (e) {
-      var dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * list.clientHeight : e.deltaY;
-      var before = list.scrollTop;
-      list.scrollTop += dy;
-      if (list.scrollTop !== before) { e.preventDefault(); onScroll(); }
-    }, { passive: false });
+    list.addEventListener("scroll", function () {
+      lastScroll = Date.now();
+      onScroll();
+      clearTimeout(settle);
+      settle = setTimeout(function () { if (!drag && moved) release(); else if (!drag) K.idle(); }, 180);
+    }, { passive: true });
     list.addEventListener("keydown", function (e) {
-      if (e.key === "PageUp" || e.key === "PageDown") { e.preventDefault(); list.scrollTop += (e.key === "PageUp" ? -1 : 1) * list.clientHeight * 0.8; onScroll(); }
+      if (e.key === "PageUp" || e.key === "PageDown") { e.preventDefault(); list.scrollTop += (e.key === "PageUp" ? -1 : 1) * list.clientHeight * 0.8; }
     });
-    return { busy: function () { return !!(drag && moved); }, moved: function () { return moved; } };
+    return {
+      busy: function () { return !!(drag && moved) || Date.now() - lastScroll < 180; },
+      moved: function () { return moved; }
+    };
   };
 })();
