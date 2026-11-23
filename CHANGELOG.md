@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.2.0
+
+- **Tick comments off (✓):** a Live chat widget setting for the speaker.
+  New comments are outlined with a ✓ button; ticked ones fade and say
+  ADDRESSED on every screen; the header counts what's left, and New only
+  hides the rest. Tap ✓ again to bring one back. Action:
+  `comment_addressed` (the one action a remote viewer limited to their
+  own screen may run).
+
+## 0.1.0
 
 Needs jadeck 0.6 or newer (frame widgets and the shared frame kit) and add-on
 SDK v0.5.0 (setup guides, action fields, automatic connection types,

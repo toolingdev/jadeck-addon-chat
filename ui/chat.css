@@ -205,3 +205,22 @@ body.comments.small .pintext { font-size: 14px; }
 body.comments.small .meta { font-size: 10px; line-height: 14px; }
 body.comments.small #main { gap: 6px; }
 body.comments.small .list { gap: 6px; }
+
+/* Ticking comments off (Live chat setting "Tick comments off"): new ones
+   outlined blue with a ✓, ticked ones faded; header count + New only. */
+.msg.fresh { border-color: color-mix(in srgb, var(--color-info) 80%, transparent); background: color-mix(in srgb, var(--color-info) 8%, var(--color-panel-2)); }
+.msg.done { opacity: .55; }
+.meta .newtag { color: var(--color-info); font-weight: 700; letter-spacing: .06em; }
+.meta .ackd { color: var(--color-good); font-weight: 700; letter-spacing: .06em; }
+.msg .ack { flex: none; align-self: center; width: var(--jk-tap); min-width: var(--jk-tap); font-size: 18px; color: var(--color-info);
+  border-color: color-mix(in srgb, var(--color-info) 70%, transparent); }
+.msg.done .ack { color: var(--color-good); border-color: var(--color-line); }
+.ackhead { display: inline-flex; align-items: center; gap: 8px; }
+.ackhead .count { font-weight: 800; letter-spacing: .08em; color: var(--color-muted); }
+.ackhead .count.some { color: var(--color-info); }
+.newonly { height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--color-line-strong); background: transparent;
+  color: var(--color-muted); font: 700 10.5px/1 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.newonly.on { background: color-mix(in srgb, var(--color-info) 20%, transparent); border-color: var(--color-info); color: var(--color-info); }
+/* ticking off: the words on the left, the ✓ on the right */
+body.comments .msg.fresh, body.comments .msg.done { flex-direction: row; align-items: center; gap: 10px; padding-right: 8px; }
+body.comments .msg .body { display: flex; flex-direction: column; gap: 3px; }

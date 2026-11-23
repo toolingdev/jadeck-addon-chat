@@ -192,17 +192,18 @@ func (c *Conn) feedGone(id string) {
 
 // wireMessage is a message as the widget gets it.
 type wireMessage struct {
-	ID       string     `json:"id"`
-	Platform string     `json:"platform"`
-	Author   string     `json:"author"`
-	At       string     `json:"at"`
-	Text     string     `json:"text"`
-	Super    string     `json:"super,omitempty"`
-	Avatar   string     `json:"avatar,omitempty"` // http(s) only (Show on screen's FromPhoto)
-	OnScreen bool       `json:"onScreen,omitempty"`
-	Mine     bool       `json:"mine,omitempty"`    // sent from jadeck ("YOU · <account>")
-	Sent     []sentMark `json:"sent,omitempty"`    // mine: ✓ / ✕ per platform
-	ReplyTo  string     `json:"replyTo,omitempty"` // mine: the author it answered
+	ID        string     `json:"id"`
+	Platform  string     `json:"platform"`
+	Author    string     `json:"author"`
+	At        string     `json:"at"`
+	Text      string     `json:"text"`
+	Super     string     `json:"super,omitempty"`
+	Avatar    string     `json:"avatar,omitempty"` // http(s) only (Show on screen's FromPhoto)
+	OnScreen  bool       `json:"onScreen,omitempty"`
+	Addressed bool       `json:"addressed,omitempty"` // ticked off by the speaker
+	Mine      bool       `json:"mine,omitempty"`      // sent from jadeck ("YOU · <account>")
+	Sent      []sentMark `json:"sent,omitempty"`      // mine: ✓ / ✕ per platform
+	ReplyTo   string     `json:"replyTo,omitempty"`   // mine: the author it answered
 }
 
 func wire(m Message) wireMessage {
@@ -375,12 +376,15 @@ func (c *Conn) state(f filter) map[string]any {
 	v := c.store.viewFor(shownLimit, keep, f.platforms())
 	msgs := make([]wireMessage, 0, len(v.messages))
 	for _, m := range v.messages {
-		msgs = append(msgs, wire(m))
+		w := wire(m)
+		w.Addressed = v.addressed[m.ID]
+		msgs = append(msgs, w)
 	}
 	var pinned any
 	if v.pinned != nil {
 		w := wire(*v.pinned)
 		w.OnScreen = v.onScreen
+		w.Addressed = v.addressed[v.pinned.ID]
 		pinned = w
 	}
 
@@ -467,6 +471,7 @@ func (c *Conn) state(f filter) map[string]any {
 		"messages":    msgs,
 		"pinned":      pinned,
 		"hiddenCount": v.hiddenN,
+		"newCount":    v.fresh,
 		"detail":      strings.Join(details, " · "),
 		"canSend":     canSend && !c.sample,
 		"lastSend":    c.lastSendState(),
@@ -554,6 +559,19 @@ func (c *Conn) AddonAction(ctx context.Context, name string, params json.RawMess
 	case "show_hidden":
 		c.store.unhideAll()
 		return map[string]any{"ok": true}, nil
+	case "comment_addressed":
+		var a struct {
+			Addressed *bool `json:"addressed"`
+		}
+		json.Unmarshal(params, &a)
+		on := a.Addressed == nil || *a.Addressed
+		if p.ID == "" {
+			return nil, errors.New("which message? (id)")
+		}
+		if !c.store.setAddressed(p.ID, on) {
+			return nil, errors.New("that message is no longer in the chat")
+		}
+		return map[string]any{"ok": true, "id": p.ID, "addressed": on}, nil
 	}
 	return nil, fmt.Errorf("%w: %s", addon.ErrUnknownAction, name)
 }

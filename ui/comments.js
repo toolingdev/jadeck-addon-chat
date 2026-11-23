@@ -24,7 +24,7 @@
   foot.appendChild(footNote); foot.appendChild(unhide);
   main.appendChild(errs); main.appendChild(pin); main.appendChild(wrap); main.appendChild(foot);
 
-  var open = null, pinOpen = false, stick = true, lastSeen = "", tap = false, narrow = false;
+  var open = null, pinOpen = false, stick = true, lastSeen = "", tap = false, narrow = false, ack = false, newOnly = false, hdrTight = false;
   var plat = C.plat, MIN_LIST = 72;
   var scroll = C.scroller(list, onScroll);
   K.busy = scroll.busy;
@@ -56,11 +56,25 @@
     return d;
   }
   function row(m) {
-    var r = K.el("div", "msg" + (m.super ? " super" : "") + (m.mine ? " mine" : "") + (m.id === open ? " open" : ""));
+    var canAck = ack && !m.mine;
+    var r = K.el("div", "msg" + (m.super ? " super" : "") + (m.mine ? " mine" : "") + (m.id === open ? " open" : "") +
+      (canAck ? (m.addressed ? " done" : " fresh") : ""));
     r.dataset.id = m.id;
     if (tap) { r.tabIndex = 0; r.setAttribute("aria-expanded", m.id === open ? "true" : "false"); }
-    r.appendChild(meta(m));
-    r.appendChild(K.el("div", "text", m.text || ""));
+    var body = K.el("div", "body");
+    var md = meta(m);
+    if (canAck) md.appendChild(K.el("span", m.addressed ? "ackd" : "newtag", m.addressed ? " · ✓ ADDRESSED" : " · NEW"));
+    body.appendChild(md);
+    body.appendChild(K.el("div", "text", m.text || ""));
+    r.appendChild(body);
+    if (canAck) {
+      // ✓ ticks it off (on every screen); on one already ticked it undoes it
+      var ok = JK.button({ label: "✓", title: m.addressed ? "Mark as new again" : "Mark addressed",
+        onClick: function () { return K.act("comment_addressed", { id: m.id, addressed: !m.addressed }).then(function () {}, function () {}); } });
+      ok.classList.add("ack");
+      ok.setAttribute("aria-label", m.addressed ? "Mark as new again: " + (m.author || "") : "Mark addressed: " + (m.author || ""));
+      r.appendChild(ok);
+    }
     if (tap && m.id === open) {
       var a = K.el("div", "acts");
       a.appendChild(JK.button({ label: "Pin", onClick: function () { return act("pin", { id: m.id }); } }));
@@ -112,10 +126,14 @@
     var w = main.clientWidth, h = main.clientHeight + 26;
     document.body.classList.toggle("short", h < 240);
     narrow = w < 300;
+    hdrTight = w < 440; // phone-wide: the tick-off count and switch take the source's place
     document.body.classList.toggle("narrow", narrow);
     document.body.classList.toggle("small", w < 260 || h < 220);
     var srcs = Array.isArray(st.sources) ? st.sources : [];
-    hdr.set({ title: "Live chat", status: st.bad ? "bad" : st.live ? "ok" : "warn", source: source(st), note: "", bad: !!st.bad, right: "" });
+    ack = settings.ack === true || settings.ack === "true";
+    if (!ack) newOnly = false;
+    // ticking off on a phone: the count and switch need the header's room
+    hdr.set({ title: "Live chat", status: st.bad ? "bad" : st.live ? "ok" : "warn", source: ack && hdrTight ? "" : source(st), note: "", bad: !!st.bad, right: ack ? ackRight(st) : "" });
     hdr.el.title = srcs.map(function (s) {
       var d = plat(s.platform);
       return d.name + (s.label ? " (" + s.label + ")" : "") + ": " + (s.state === "live" ? "live" + (s.viewers >= 0 ? ", " + s.viewers + " watching" : "") : s.state || "") + (s.note ? " — " + s.note : "");
@@ -124,6 +142,7 @@
     drawPin(st);
 
     var msgs = Array.isArray(st.messages) ? st.messages : [];
+    if (ack && newOnly) msgs = msgs.filter(function (m) { return m.mine || !m.addressed; });
     var newest = msgs.length ? msgs[msgs.length - 1].id : "";
     var keep = list.scrollTop, wasStuck = stick;
     if (open && !msgs.some(function (m) { return m.id === open; })) open = null;
@@ -153,6 +172,22 @@
     if (wrap.clientHeight < MIN_LIST) errs.hidden = true;
     if (wasStuck) toBottom();
   };
+
+  // the header, ticking comments off: "2 NEW" and the New only switch
+  function ackRight(st) {
+    var box = K.el("span", "ackhead");
+    var n = st.newCount || 0;
+    box.appendChild(K.el("span", "count" + (n ? " some" : ""), n + " NEW"));
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "newonly" + (newOnly ? " on" : "");
+    b.setAttribute("aria-pressed", newOnly ? "true" : "false");
+    b.textContent = narrow ? "New" : "New only";
+    b.title = "Show only the comments not ticked off yet";
+    b.addEventListener("click", function () { if (K.editing) return; newOnly = !newOnly; stick = true; K.draw(); });
+    box.appendChild(b);
+    return box;
+  }
 
   // ------------------------------------------------------- taps, keys
   function toggle(id) {

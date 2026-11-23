@@ -281,7 +281,7 @@ func TestManifestValidatesWithGuides(t *testing.T) {
 		}
 	}
 	lc := fields(m.Widgets[0])
-	if lc["tap"].Type != addon.FieldBool || lc["tap"].Default != false || lc["tap"].Label != "Let people tap comments" || len(lc) != 2 {
+	if lc["tap"].Type != addon.FieldBool || lc["tap"].Default != false || lc["tap"].Label != "Let people tap comments" || lc["ack"].Type != addon.FieldBool || lc["ack"].Default != false || len(lc) != 3 {
 		t.Errorf("live_chat fields %+v", lc)
 	}
 	rf := fields(m.Widgets[1])
@@ -351,5 +351,29 @@ func TestSamplesMatchTheWidgets(t *testing.T) {
 	r := replySample()
 	if r["canSend"] != true || r["pinned"].(wireMessage).OnScreen != true {
 		t.Errorf("reply sample %v %v", r["canSend"], r["pinned"])
+	}
+}
+
+// The speaker ticks comments off: they're marked on every screen and
+// leave the NEW count; unticking brings them back.
+func TestCommentAddressed(t *testing.T) {
+	h := addontest.Start(t, spec())
+	h.Open("c", "chat", map[string]any{})
+	st := h.State("c", nil)
+	msgs := st["messages"].([]any)
+	before := st["newCount"].(float64)
+	id := msgs[len(msgs)-1].(map[string]any)["id"].(string)
+	if err := h.TryCall("c", "addon.action", map[string]any{"name": "comment_addressed", "params": map[string]any{"id": "nope"}}, nil); err == nil {
+		t.Fatal("addressed a message that isn't there")
+	}
+	h.Call("c", "addon.action", map[string]any{"name": "comment_addressed", "params": map[string]any{"id": id}}, nil)
+	st = h.State("c", map[string]any{"platforms": []any{}})
+	last := st["messages"].([]any)
+	if m := last[len(last)-1].(map[string]any); m["id"] != id || m["addressed"] != true || st["newCount"].(float64) != before-1 {
+		t.Fatalf("after ✓: %v, new %v (was %v)", m, st["newCount"], before)
+	}
+	h.Call("c", "addon.action", map[string]any{"name": "comment_addressed", "params": map[string]any{"id": id, "addressed": false}}, nil)
+	if st = h.State("c", nil); st["newCount"].(float64) != before {
+		t.Fatalf("untick: new %v", st["newCount"])
 	}
 }

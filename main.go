@@ -13,7 +13,7 @@ import (
 )
 
 // Version is set by the release build.
-var Version = "0.1.0"
+var Version = "0.2.0"
 
 func main() { addon.Serve(spec()) }
 
@@ -227,6 +227,9 @@ func spec() addon.Spec {
 				{ID: "hide", Label: "Hide chat message here", Description: "Hide a message from the widget on every screen (not from the platform).",
 					Params: []addon.Field{{Key: "id", Label: "Message id", Type: "text", Required: true}}},
 				{ID: "show_hidden", Label: "Show hidden chat messages"},
+				{ID: "comment_addressed", Label: "Mark a comment addressed",
+					Description: "Tick a comment off as dealt with (the speaker read it out or answered it): it fades on every screen and leaves the NEW count. addressed: false brings it back.",
+					Params:      []addon.Field{{Key: "id", Label: "Message id", Type: "text", Required: true}, {Key: "addressed", Label: "Addressed", Type: "bool"}}},
 				{ID: "send_message", Label: "Send a chat message", MacroStep: true,
 					Description: "Post a message in the live chats as the signed-in accounts: to everyone (every platform that can reply, or the ones named), or a reply to one message (only its platform). Answers what got through, per platform.",
 					Params: []addon.Field{
@@ -246,7 +249,9 @@ func spec() addon.Spec {
 					Entry:       "ui/comments.html", Size: &addon.Size{W: 5, H: 10}, MinPx: &addon.Size{W: 220, H: 180}, Sample: commentsSample(),
 					Fields: []addon.Field{platformsField,
 						{Key: "tap", Label: "Let people tap comments", Type: addon.FieldBool, Default: false,
-							Help: "On: tapping a comment offers Pin and Hide here. Off: tapping does nothing."}}},
+							Help: "On: tapping a comment offers Pin and Hide here. Off: tapping does nothing."},
+						{Key: "ack", Label: "Tick comments off (✓)", Type: addon.FieldBool, Default: false,
+							Help: "For the speaker: new comments are outlined with a ✓ button; ticked ones fade (on every screen), the header counts what's left, and New only hides the rest."}}},
 				{Kind: addon.KindFrame, Type: "live_chat_reply", Label: "Live chat + reply",
 					Description: "The comments plus a reply box, Show on screen, Pin and Hide.",
 					Entry:       "ui/chat.html", Size: &addon.Size{W: 5, H: 10}, MinPx: &addon.Size{W: 220, H: 180}, Sample: replySample(),
@@ -257,7 +262,7 @@ func spec() addon.Spec {
 						{Key: "vmixHeading", Label: "Title heading", Type: addon.FieldText, Default: "Live Comments", Advanced: true,
 							Help: "Goes in the title's Title.Text field."}}},
 			},
-			Changelog: "First release: YouTube, Facebook, Twitch, Rumble and Owncast chat, each its own connection with a setup guide, merged in two widgets: Live chat (just the comments, big) and Live chat + reply (replies to one comment or every platform at once, Show on screen through your vMix connection, pin and hide here).",
+			Changelog: "0.2.0: Tick comments off (✓) in the Live chat widget: new ones outlined, ticked ones fade on every screen, a NEW count and New only. 0.1.0: first release: YouTube, Facebook, Twitch, Rumble and Owncast chat, each its own connection with a setup guide, merged in two widgets: Live chat (just the comments, big) and Live chat + reply (replies to one comment or every platform at once, Show on screen through your vMix connection, pin and hide here).",
 		},
 		Open: map[string]addon.OpenFunc{
 			"chat":     func(raw json.RawMessage) (any, error) { return Open(raw) },

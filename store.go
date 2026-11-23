@@ -47,20 +47,21 @@ const maxKept = 500
 
 // store is the merged chat. Safe for concurrent use.
 type store struct {
-	mu       sync.Mutex
-	msgs     []Message // sorted by At, then arrival
-	byID     map[string]int
-	seq      uint64
-	total    int            // every message ever added (kept or not)
-	totalBy  map[string]int // the same, per platform
-	hidden   map[string]bool
-	pinned   string // id of the pinned message ("" none)
-	onScreen string // id of the message marked on screen ("" none)
-	shown    *Message
+	mu        sync.Mutex
+	msgs      []Message // sorted by At, then arrival
+	byID      map[string]int
+	seq       uint64
+	total     int            // every message ever added (kept or not)
+	totalBy   map[string]int // the same, per platform
+	hidden    map[string]bool
+	addressed map[string]bool // ticked off by the speaker (✓)
+	pinned    string          // id of the pinned message ("" none)
+	onScreen  string          // id of the message marked on screen ("" none)
+	shown     *Message
 }
 
 func newStore() *store {
-	return &store{byID: map[string]int{}, hidden: map[string]bool{}, totalBy: map[string]int{}}
+	return &store{byID: map[string]int{}, hidden: map[string]bool{}, addressed: map[string]bool{}, totalBy: map[string]int{}}
 }
 
 // add merges messages in: new ones are inserted in time order, ones
@@ -99,6 +100,7 @@ func (s *store) add(in ...Message) int {
 			if m.ID != s.pinned && m.ID != s.onScreen {
 				delete(s.hidden, m.ID)
 			}
+			delete(s.addressed, m.ID)
 		}
 		s.msgs = slices.Clone(s.msgs[over:])
 	}
@@ -276,6 +278,8 @@ type view struct {
 	pinned         *Message
 	onScreen       bool
 	total, hiddenN int
+	addressed      map[string]bool // of messages (and pinned): ticked off
+	fresh          int             // comments not yet addressed (not ours, not hidden)
 }
 
 // view is every message; viewFor only the ones keep says yes to (the
@@ -305,6 +309,14 @@ func (s *store) viewFor(limit int, keep func(Message) bool, platforms []string) 
 			v.hiddenN++
 		}
 	}
+	v.addressed = map[string]bool{}
+	for _, m := range s.msgs {
+		if s.addressed[m.ID] {
+			v.addressed[m.ID] = true
+		} else if !m.Mine && !s.hidden[m.ID] && ok(m) {
+			v.fresh++
+		}
+	}
 	for i := len(s.msgs) - 1; i >= 0 && len(v.messages) < limit; i-- {
 		m := s.msgs[i]
 		if s.hidden[m.ID] || m.ID == s.pinned || !ok(m) {
@@ -314,4 +326,20 @@ func (s *store) viewFor(limit int, keep func(Message) bool, platforms []string) 
 	}
 	slices.Reverse(v.messages)
 	return v
+}
+
+// setAddressed ticks a comment off (or back on). It reports whether the
+// message is still in the chat.
+func (s *store) setAddressed(id string, on bool) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.getLocked(id); !ok {
+		return false
+	}
+	if on {
+		s.addressed[id] = true
+	} else {
+		delete(s.addressed, id)
+	}
+	return true
 }
